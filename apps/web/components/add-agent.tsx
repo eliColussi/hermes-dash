@@ -26,7 +26,7 @@ function AddAgentSheet({ onClose, onCreated }: { onClose: () => void; onCreated:
   const [role, setRole] = useState("");
   const [description, setDescription] = useState("");
   const [icon, setIcon] = useState("🤖");
-  const [model, setModel] = useState("claude-sonnet-4-6");
+  const [model, setModel] = useState("anthropic/claude-sonnet-4.6");
   const [systemPrompt, setSystemPrompt] = useState("");
   const [busy, setBusy] = useState(false);
   const [err, setErr] = useState<string | null>(null);
@@ -116,9 +116,20 @@ function AddAgentSheet({ onClose, onCreated }: { onClose: () => void; onCreated:
 
         <Field label="Model">
           <select value={model} onChange={(e) => setModel(e.target.value)} className="input">
-            <option value="claude-opus-4-7">claude-opus-4-7</option>
-            <option value="claude-sonnet-4-6">claude-sonnet-4-6</option>
-            <option value="claude-haiku-4-5">claude-haiku-4-5</option>
+            <optgroup label="OpenRouter">
+              <option value="anthropic/claude-opus-4.7">Claude Opus 4.7</option>
+              <option value="anthropic/claude-sonnet-4.6">Claude Sonnet 4.6</option>
+              <option value="anthropic/claude-haiku-4.5">Claude Haiku 4.5</option>
+              <option value="openai/gpt-5">GPT-5</option>
+              <option value="openai/gpt-5-mini">GPT-5 mini</option>
+              <option value="google/gemini-2.5-pro">Gemini 2.5 Pro</option>
+              <option value="deepseek/deepseek-r1">DeepSeek R1</option>
+              <option value="x-ai/grok-4">Grok 4</option>
+            </optgroup>
+            <optgroup label="Direct (uses Anthropic key)">
+              <option value="claude-opus-4-7">Claude Opus 4.7</option>
+              <option value="claude-sonnet-4-6">Claude Sonnet 4.6</option>
+            </optgroup>
           </select>
         </Field>
 

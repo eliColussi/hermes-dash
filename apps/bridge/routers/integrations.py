@@ -25,6 +25,34 @@ GATEWAY_LOG = STAFFROOM_RUNTIME_DIR / "gateway.log"
 
 
 PROVIDERS = {
+    "openrouter": {
+        "label": "OpenRouter (AI models)",
+        "icon": "🧠",
+        "fields": [
+            {"key": "OPENROUTER_API_KEY", "label": "API Key", "secret": True,
+             "help": "From openrouter.ai/keys. Unlocks every model in the Add Agent picker."},
+            {"key": "OPENROUTER_SITE_URL", "label": "Site URL (optional)", "secret": False,
+             "help": "Shown on OpenRouter analytics; set to your client's domain."},
+            {"key": "OPENROUTER_APP_NAME", "label": "App name (optional)", "secret": False,
+             "help": "Shown on OpenRouter analytics."},
+        ],
+    },
+    "anthropic": {
+        "label": "Anthropic (direct)",
+        "icon": "🟧",
+        "fields": [
+            {"key": "ANTHROPIC_API_KEY", "label": "API Key", "secret": True,
+             "help": "Only needed if you want to bypass OpenRouter for Claude models."},
+        ],
+    },
+    "openai": {
+        "label": "OpenAI (direct)",
+        "icon": "⚫",
+        "fields": [
+            {"key": "OPENAI_API_KEY", "label": "API Key", "secret": True,
+             "help": "Only needed if you want to bypass OpenRouter for GPT models."},
+        ],
+    },
     "telegram": {
         "label": "Telegram",
         "icon": "✈️",
