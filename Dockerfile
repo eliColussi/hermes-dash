@@ -47,7 +47,8 @@ ENV PORT=3737 \
     STAFFROOM_HOME=/data/staffroom
 
 EXPOSE 3737
-VOLUME ["/data"]
+# Note: Railway doesn't allow VOLUME directives; mount /data via Railway's
+# Volumes UI instead. For plain `docker run`, use `-v hermes-dash-data:/data`.
 
 HEALTHCHECK --interval=30s --timeout=5s --start-period=20s --retries=3 \
   CMD curl -fsS http://127.0.0.1:8787/api/health || exit 1
