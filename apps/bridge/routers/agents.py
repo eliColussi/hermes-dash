@@ -28,12 +28,7 @@ def _materialize(agent: dict[str, Any]) -> AgentView:
 
 
 def _tasks_for_agent_today(agent_id: str) -> int:
-    midnight = time.time() - (time.time() % 86400)
-    for s in hc.query_sessions(limit=500, since=midnight):
-        # We don't yet tag sessions with our agent_id; this is a placeholder
-        # until the spawn path injects STAFFROOM_AGENT_ID into a session column.
-        pass
-    return 0
+    return hc.count_agent_sessions_today(agent_id)
 
 
 @router.get("", response_model=list[AgentView])

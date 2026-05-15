@@ -22,6 +22,14 @@ STAFFROOM_RUNTIME_DIR = STAFFROOM_HOME / "runtime"
 VENDOR_HERMES = Path(__file__).resolve().parent.parent.parent / "vendor" / "hermes-agent"
 VENDOR_SKILLS_DIR = VENDOR_HERMES / "skills"
 
+# Path to the hermes CLI. Prefer the one in our bridge venv, fall back to PATH.
+_BRIDGE_VENV_BIN = Path(__file__).resolve().parent / ".venv" / "bin"
+HERMES_BIN = (
+    str(_BRIDGE_VENV_BIN / "hermes")
+    if (_BRIDGE_VENV_BIN / "hermes").exists()
+    else "hermes"
+)
+
 
 def ensure_dirs() -> None:
     STAFFROOM_HOME.mkdir(parents=True, exist_ok=True)

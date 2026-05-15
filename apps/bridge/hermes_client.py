@@ -24,6 +24,7 @@ import yaml
 from ruamel.yaml import YAML
 
 from .config import (
+    HERMES_BIN,
     HERMES_HOME,
     HERMES_LOGS_DIR,
     HERMES_SKILLS_DIR,
@@ -196,17 +197,32 @@ def agent_pid(agent_id: str) -> Optional[int]:
     return pid
 
 
+def _uptime_file(agent_id: str) -> Path:
+    return STAFFROOM_RUNTIME_DIR / f"{agent_id}.uptime"
+
+
+def agent_started_at(agent_id: str) -> Optional[float]:
+    uf = _uptime_file(agent_id)
+    if not uf.exists():
+        return None
+    try:
+        return float(uf.read_text().strip())
+    except (ValueError, OSError):
+        return None
+
+
 def start_agent(agent: dict[str, Any]) -> int:
     ensure_dirs()
     if (pid := agent_pid(agent["id"])) is not None:
         return pid
     log_path = STAFFROOM_RUNTIME_DIR / f"{agent['id']}.log"
+    _uptime_file(agent["id"]).write_text(str(time.time()))
     # We shell out rather than importing AIAgent to insulate the bridge from
     # upstream class signature changes. The exact `hermes` invocation will need
     # tuning per HERMÉS release — this is the well-known fragile seam from the
     # plan's Risks section.
     cmd = [
-        "hermes",
+        HERMES_BIN,
         "chat",
         "--non-interactive",
         "--model",
@@ -230,13 +246,25 @@ def start_agent(agent: dict[str, Any]) -> int:
 def stop_agent(agent_id: str) -> bool:
     pid = agent_pid(agent_id)
     if pid is None:
+        _uptime_file(agent_id).unlink(missing_ok=True)
         return False
     try:
         os.killpg(os.getpgid(pid), signal.SIGTERM)
     except (ProcessLookupError, PermissionError):
         pass
     _pidfile(agent_id).unlink(missing_ok=True)
+    _uptime_file(agent_id).unlink(missing_ok=True)
     return True
+
+
+def count_agent_sessions_today(agent_id: str) -> int:
+    """Sessions that started while this agent was running today."""
+    started = agent_started_at(agent_id)
+    if started is None:
+        return 0
+    midnight = time.time() - (time.time() % 86400)
+    since = max(started, midnight)
+    return count_sessions(since)
 
 
 def agent_runtime_status(agent_id: str) -> tuple[str, Optional[int], Optional[float]]:

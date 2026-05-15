@@ -40,6 +40,36 @@ staff-room-os/
 
 Pinned HERMÉS commit: see `vendor/HERMES_COMMIT.txt`.
 
+## Deploy on Railway / Render / any Docker host
+
+The repo ships a single-container `Dockerfile` that runs both services. The Next.js app binds to `$PORT` (Railway's contract); the FastAPI bridge runs on internal `127.0.0.1:8787` and the web proxies `/api/*` to it with the bearer token attached server-side.
+
+### Railway
+
+1. New Project → Deploy from GitHub → pick `hermes-dash`.
+2. Railway auto-detects `railway.json` and uses the Dockerfile.
+3. Add a **Volume** mounted at `/data` so HERMÉS state and the auth token survive restarts.
+4. Set these env vars (all optional — sensible defaults exist):
+   - `STAFFROOM_AUTH_TOKEN` — pin a stable token. Otherwise one is generated on first boot and persisted in `/data/staffroom/token`.
+   - `STAFFROOM_CORS_ORIGINS` — comma-separated origins if you want to call the bridge directly from a custom frontend.
+   - Provider creds (`TELEGRAM_BOT_TOKEN`, `SLACK_BOT_TOKEN`, `SLACK_APP_TOKEN`, etc.) — these can also be set later from the Integrations tab.
+   - Model creds (`ANTHROPIC_API_KEY`, `OPENAI_API_KEY`, `OPENROUTER_API_KEY`, …) — required for agents to do anything.
+5. Healthcheck path is `/api/health`.
+6. Open the Railway-provided URL. The Settings page shows your token.
+
+### Self-hosted Docker
+
+```bash
+docker build -t hermes-dash .
+docker run -d --name hermes-dash \
+  -p 3737:3737 \
+  -v hermes-dash-data:/data \
+  -e ANTHROPIC_API_KEY=sk-ant-... \
+  hermes-dash
+```
+
+Open http://localhost:3737. The auto-minted bearer token is in `/data/staffroom/token` inside the container.
+
 ## Quickstart
 
 ```bash
@@ -68,8 +98,8 @@ Items rendered with a `soon` badge are intentional placeholders for v2.
 
 - **"Self-learning skills" is marketing, not code.** HERMÉS skills are static SKILL.md files agents consume; there is no auto-generation pipeline in the repo today. Pitch as *autonomous execution with curated skills.*
 - **Agent spawn command is the fragile seam.** `hermes chat --non-interactive …` may need tuning per HERMÉS release. If subprocess args drift, edit `apps/bridge/hermes_client.py::start_agent`.
-- **Single-tenant only.** No auth, no multi-tenant isolation. Each client gets a dedicated install.
-- **Tool-call count is a proxy for "tasks today."** Real per-agent task attribution requires a HERMÉS schema patch (add `staffroom_agent_id` column to `sessions`). Tracked as v2.
+- **Single-tenant.** Bearer-token auth protects the bridge, but there's no per-user accounts or RBAC. Each client gets a dedicated deploy.
+- **Per-agent task counts use a time-window heuristic.** A session counts toward an agent if it started during that agent's current uptime. Multi-agent overlap will misattribute. Real attribution requires HERMÉS to tag sessions with our agent_id (tracked as v2).
 
 ## Verification (smoke test)
 

@@ -7,8 +7,6 @@ import { api } from "@/lib/api";
 export default function LogPage() {
   const files = useQuery({ queryKey: ["logs"], queryFn: api.logs });
   const [selected, setSelected] = useState<string | null>(null);
-  const [lines, setLines] = useState<string[]>([]);
-  const wsRef = useRef<WebSocket | null>(null);
   const scrollRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
@@ -17,32 +15,21 @@ export default function LogPage() {
     }
   }, [files.data, selected]);
 
-  useEffect(() => {
-    if (!selected) return;
-    setLines([]);
-
-    const proto = window.location.protocol === "https:" ? "wss" : "ws";
-    const ws = new WebSocket(`${proto}://${window.location.host}/api/logs/stream?name=${encodeURIComponent(selected)}`);
-    wsRef.current = ws;
-
-    ws.onmessage = (ev) => {
-      try {
-        const msg = JSON.parse(ev.data);
-        if (msg.line !== undefined) setLines((prev) => [...prev.slice(-1000), msg.line]);
-      } catch {}
-    };
-
-    return () => ws.close();
-  }, [selected]);
+  const tail = useQuery({
+    queryKey: ["tail", selected],
+    queryFn: () => api.tailLog(selected!, 500),
+    enabled: !!selected,
+    refetchInterval: 2000,
+  });
 
   useEffect(() => {
     scrollRef.current?.scrollTo({ top: scrollRef.current.scrollHeight });
-  }, [lines]);
+  }, [tail.data]);
 
   return (
     <div className="max-w-6xl mx-auto">
       <h1 className="text-3xl font-semibold tracking-tight">Log</h1>
-      <p className="text-sm text-muted mt-1 mb-6">Live tail of HERMÉS + agent logs.</p>
+      <p className="text-sm text-muted mt-1 mb-6">Live tail of HERMÉS + agent logs (polled every 2s).</p>
 
       <div className="flex gap-3 mb-4 flex-wrap">
         {(files.data?.files ?? []).map((f) => (
@@ -65,8 +52,10 @@ export default function LogPage() {
         ref={scrollRef}
         className="card font-mono text-xs p-4 h-[60vh] overflow-y-auto bg-[var(--bg)]"
       >
-        {lines.length === 0 && <div className="text-muted">Waiting for output…</div>}
-        {lines.map((l, i) => (
+        {(tail.data?.lines ?? []).length === 0 && (
+          <div className="text-muted">Waiting for output…</div>
+        )}
+        {(tail.data?.lines ?? []).map((l, i) => (
           <div key={i} className="whitespace-pre-wrap break-words">
             {l}
           </div>

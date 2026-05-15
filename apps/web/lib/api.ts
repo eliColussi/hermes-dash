@@ -105,7 +105,21 @@ export const api = {
     req<{ running: boolean; pid: number }>("/api/integrations/gateway/start", { method: "POST" }),
   stopGateway: () =>
     req<{ running: boolean }>("/api/integrations/gateway/stop", { method: "POST" }),
+  settings: () => req<SettingsView>("/api/settings"),
+  rotateToken: () =>
+    req<{ rotated: boolean; token?: string; note?: string }>(
+      "/api/settings/rotate-token",
+      { method: "POST" },
+    ),
 };
+
+export interface SettingsView {
+  token: string | null;
+  auth_disabled: boolean;
+  hermes_home: string;
+  staffroom_home: string;
+  env: Record<string, string>;
+}
 
 export interface Integration {
   id: string;

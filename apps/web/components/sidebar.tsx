@@ -121,10 +121,13 @@ export function Sidebar() {
       </nav>
 
       <div className="px-3 pb-5 pt-3 border-t border-line">
-        <div className="nav-item opacity-80 cursor-default">
+        <Link
+          href="/settings"
+          className={cn("nav-item", pathname === "/settings" && "active")}
+        >
           <Settings className="w-4 h-4" />
           <span>Settings</span>
-        </div>
+        </Link>
         <div className="text-xs text-muted px-3 pt-2">v0.1.0</div>
       </div>
     </aside>

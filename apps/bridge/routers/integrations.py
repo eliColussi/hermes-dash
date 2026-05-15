@@ -15,7 +15,7 @@ import psutil
 from fastapi import APIRouter, HTTPException
 from pydantic import BaseModel
 
-from ..config import HERMES_HOME, STAFFROOM_RUNTIME_DIR, ensure_dirs
+from ..config import HERMES_BIN, HERMES_HOME, STAFFROOM_RUNTIME_DIR, ensure_dirs
 
 router = APIRouter(prefix="/api/integrations", tags=["integrations"])
 
@@ -176,7 +176,7 @@ def gateway_start() -> dict:
     ensure_dirs()
     with GATEWAY_LOG.open("a") as logf:
         proc = subprocess.Popen(
-            ["hermes", "gateway"],
+            [HERMES_BIN, "gateway"],
             stdout=logf,
             stderr=subprocess.STDOUT,
             stdin=subprocess.DEVNULL,

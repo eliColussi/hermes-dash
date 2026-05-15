@@ -4,15 +4,15 @@ from __future__ import annotations
 import asyncio
 from pathlib import Path
 
-from fastapi import APIRouter, HTTPException, Query, WebSocket, WebSocketDisconnect
+from fastapi import APIRouter, Depends, HTTPException, Query, WebSocket, WebSocketDisconnect
 from watchfiles import awatch
 
-from .. import hermes_client as hc
+from .. import auth, hermes_client as hc
 
 router = APIRouter(prefix="/api/logs", tags=["logs"])
 
 
-@router.get("")
+@router.get("", dependencies=[Depends(auth.require_token)])
 def list_logs() -> dict:
     return {
         "files": [
@@ -22,7 +22,7 @@ def list_logs() -> dict:
     }
 
 
-@router.get("/tail")
+@router.get("/tail", dependencies=[Depends(auth.require_token)])
 def tail(name: str = Query(...), lines: int = Query(200, ge=1, le=5000)) -> dict:
     for p in hc.list_log_files():
         if p.name == name:
@@ -31,7 +31,12 @@ def tail(name: str = Query(...), lines: int = Query(200, ge=1, le=5000)) -> dict
 
 
 @router.websocket("/stream")
-async def stream(ws: WebSocket, name: str) -> None:
+async def stream(ws: WebSocket, name: str, token: str | None = None) -> None:
+    if not auth.is_disabled():
+        import secrets as _secrets
+        if not token or not _secrets.compare_digest(token, auth.current_token()):
+            await ws.close(code=4401)
+            return
     await ws.accept()
     target: Path | None = next((p for p in hc.list_log_files() if p.name == name), None)
     if target is None:
@@ -39,7 +44,6 @@ async def stream(ws: WebSocket, name: str) -> None:
         await ws.close()
         return
 
-    # Send the existing tail first so the client has context.
     for line in hc.tail_log(target, lines=100):
         await ws.send_json({"line": line})
 
@@ -50,7 +54,7 @@ async def stream(ws: WebSocket, name: str) -> None:
                 continue
             size = target.stat().st_size
             if size < pos:
-                pos = 0  # truncated/rotated
+                pos = 0
             if size > pos:
                 with target.open("r", errors="replace") as f:
                     f.seek(pos)
@@ -61,6 +65,6 @@ async def stream(ws: WebSocket, name: str) -> None:
             await asyncio.sleep(0)
     except WebSocketDisconnect:
         return
-    except Exception as exc:  # pragma: no cover - best-effort error surfacing
+    except Exception as exc:  # pragma: no cover
         await ws.send_json({"error": str(exc)})
         await ws.close()
