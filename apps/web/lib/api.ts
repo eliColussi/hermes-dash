@@ -91,4 +91,27 @@ export const api = {
       `/api/logs/tail?name=${encodeURIComponent(name)}&lines=${lines}`
     ),
   skills: () => req<Skill[]>("/api/skills"),
+  integrations: () =>
+    req<{
+      integrations: Integration[];
+      gateway: { running: boolean; pid: number | null; log: string };
+    }>("/api/integrations"),
+  saveIntegration: (provider: string, values: Record<string, string>) =>
+    req<{ ok: boolean }>("/api/integrations", {
+      method: "PUT",
+      body: JSON.stringify({ provider, values }),
+    }),
+  startGateway: () =>
+    req<{ running: boolean; pid: number }>("/api/integrations/gateway/start", { method: "POST" }),
+  stopGateway: () =>
+    req<{ running: boolean }>("/api/integrations/gateway/stop", { method: "POST" }),
 };
+
+export interface Integration {
+  id: string;
+  label: string;
+  icon: string;
+  fields: { key: string; label: string; secret: boolean; help: string }[];
+  values: Record<string, string>;
+  configured: boolean;
+}

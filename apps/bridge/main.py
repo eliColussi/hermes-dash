@@ -5,7 +5,7 @@ from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
 from .config import ensure_dirs
-from .routers import activity, agents, logs, overview, skills, tasks
+from .routers import activity, agents, integrations, logs, overview, skills, tasks
 
 app = FastAPI(title="Staff Room OS Bridge", version="0.1.0")
 
@@ -23,6 +23,7 @@ app.include_router(tasks.router)
 app.include_router(activity.router)
 app.include_router(logs.router)
 app.include_router(skills.router)
+app.include_router(integrations.router)
 
 
 @app.on_event("startup")

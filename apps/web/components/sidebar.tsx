@@ -36,7 +36,7 @@ const OPERATIONS = [
   { label: "Messages", icon: MessageSquare, soon: true },
   { label: "Approvals", icon: ShieldCheck, soon: true },
   { label: "Workflows", icon: Workflow, soon: true },
-  { label: "Integrations", icon: Plug, soon: true },
+  { href: "/integrations", label: "Integrations", icon: Plug },
   { label: "Goals", icon: Target, soon: true },
   { label: "Analytics", icon: BarChart3, soon: true },
 ];
@@ -83,9 +83,21 @@ export function Sidebar() {
 
         <SectionLabel>Operations</SectionLabel>
         <ul className="space-y-1">
-          {OPERATIONS.map((item) => (
-            <SoonItem key={item.label} icon={item.icon} label={item.label} />
-          ))}
+          {OPERATIONS.map((item) =>
+            "href" in item && item.href ? (
+              <li key={item.label}>
+                <Link
+                  href={item.href}
+                  className={cn("nav-item", pathname === item.href && "active")}
+                >
+                  <item.icon className="w-4 h-4" />
+                  <span>{item.label}</span>
+                </Link>
+              </li>
+            ) : (
+              <SoonItem key={item.label} icon={item.icon} label={item.label} />
+            ),
+          )}
         </ul>
 
         <SectionLabel>Intelligence</SectionLabel>

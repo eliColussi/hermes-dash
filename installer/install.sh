@@ -24,6 +24,7 @@ fi
 say "Setting up Python venv for the bridge…"
 cd "$REPO_ROOT/apps/bridge"
 uv venv --python 3.11
+export VIRTUAL_ENV="$REPO_ROOT/apps/bridge/.venv"
 uv pip install -e .
 # Also install vendored HERMÉS so the bridge can import its modules later.
 uv pip install -e "$REPO_ROOT/vendor/hermes-agent" || \
