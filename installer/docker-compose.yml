@@ -1,0 +1,23 @@
+services:
+  bridge:
+    build:
+      context: ..
+      dockerfile: installer/Dockerfile.bridge
+    ports:
+      - "8787:8787"
+    volumes:
+      - ~/.hermes:/root/.hermes
+      - ~/.staff-room-os:/root/.staff-room-os
+    restart: unless-stopped
+
+  web:
+    build:
+      context: ..
+      dockerfile: installer/Dockerfile.web
+    ports:
+      - "3737:3737"
+    environment:
+      BRIDGE_URL: http://bridge:8787
+    depends_on:
+      - bridge
+    restart: unless-stopped

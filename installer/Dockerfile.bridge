@@ -1,0 +1,13 @@
+FROM python:3.11-slim
+
+WORKDIR /app
+RUN pip install --no-cache-dir uv
+
+COPY apps/bridge /app/bridge
+COPY vendor/hermes-agent /app/vendor/hermes-agent
+
+WORKDIR /app/bridge
+RUN uv pip install --system -e .
+
+EXPOSE 8787
+CMD ["uvicorn", "main:app", "--host", "0.0.0.0", "--port", "8787"]
