@@ -123,15 +123,15 @@ done
 
 trap 'kill $BRIDGE_PID $GATEWAY_PID 2>/dev/null || true' EXIT INT TERM
 
-# Auto-start the HERMÉS gateway in a restart loop. Clients never see this; it
-# just hums in the background so Telegram/Slack/webhook traffic gets handled.
-# Suppressed entirely unless at least one messaging or webhook channel is
-# configured (no point spinning up a gateway with nothing to route).
+# Auto-start the HERMÉS gateway in a restart loop. The gateway hosts the
+# api_server platform (OpenAI-compatible POST /v1/chat/completions) which the
+# dashboard chat uses for sub-second turns — no per-message subprocess. It
+# also handles Telegram/Slack/Discord/webhook traffic when those are wired.
+export API_SERVER_ENABLED="${API_SERVER_ENABLED:-true}"
+export API_SERVER_HOST="${API_SERVER_HOST:-127.0.0.1}"
+export API_SERVER_PORT="${API_SERVER_PORT:-8642}"
 HERMES_BIN_PATH="/app/apps/bridge/.venv/bin/hermes"
-if [ -x "$HERMES_BIN_PATH" ] && {
-     [ -n "${TELEGRAM_BOT_TOKEN:-}" ] || [ -n "${SLACK_BOT_TOKEN:-}" ] || \
-     [ -n "${DISCORD_BOT_TOKEN:-}" ] || [ -n "${WEBHOOK_ENABLED:-}" ];
-   }; then
+if [ -x "$HERMES_BIN_PATH" ]; then
   (
     while true; do
       echo "[start] launching hermes gateway"
