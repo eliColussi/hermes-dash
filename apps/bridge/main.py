@@ -8,7 +8,7 @@ from fastapi.middleware.cors import CORSMiddleware
 
 from . import auth, vault
 from .config import ensure_dirs
-from .routers import activity, agents, analytics, approvals, audit, composio, integrations, logs, overview, schedules, settings, skills, tasks
+from .routers import activity, agents, analytics, approvals, audit, composio, goals, integrations, logs, overview, schedules, settings, skills, tasks
 from .routers import vault as vault_router
 from .routers import webhooks
 
@@ -44,6 +44,7 @@ app.include_router(audit.router)  # audit router enforces its own auth
 app.include_router(approvals.router)  # approvals router enforces its own auth
 app.include_router(analytics.router)  # analytics router enforces its own auth
 app.include_router(vault_router.router)  # vault router enforces its own auth
+app.include_router(goals.router)  # goals router enforces its own auth
 app.include_router(settings.router)  # settings router already enforces auth
 
 

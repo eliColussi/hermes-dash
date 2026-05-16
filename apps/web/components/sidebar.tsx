@@ -37,7 +37,7 @@ const OPERATIONS = [
   { href: "/webhooks", label: "Webhooks", icon: WebhookIcon },
   { href: "/approvals", label: "Approvals", icon: ShieldCheck },
   { href: "/integrations", label: "Integrations", icon: Plug },
-  { label: "Goals", icon: Target, soon: true },
+  { href: "/goals", label: "Goals", icon: Target },
   { href: "/analytics", label: "Analytics", icon: BarChart3 },
 ];
 

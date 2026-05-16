@@ -224,6 +224,31 @@ export const approvals = {
   history: () => req<{ items: PendingApproval[]; count: number }>("/api/approvals/history"),
 };
 
+// Goals
+export interface Goal {
+  id: string;
+  title: string;
+  description: string;
+  status: "active" | "paused" | "done" | "archived";
+  target_date: string | null;
+  owner_agent_id: string | null;
+  created_at: string;
+  updated_at: string;
+  progress: { ts: string; note: string }[];
+}
+
+export const goals = {
+  list: (status?: string) =>
+    req<{ items: Goal[]; total: number }>(
+      "/api/goals" + (status ? `?status=${status}` : ""),
+    ),
+  create: (body: { title: string; description?: string; status?: string; target_date?: string; owner_agent_id?: string }) =>
+    req<Goal>("/api/goals", { method: "POST", body: JSON.stringify(body) }),
+  patch: (id: string, body: Partial<{ title: string; description: string; status: string; target_date: string; progress_note: string }>) =>
+    req<Goal>(`/api/goals/${id}`, { method: "PATCH", body: JSON.stringify(body) }),
+  remove: (id: string) => fetch(`/api/goals/${id}`, { method: "DELETE" }),
+};
+
 export interface AnalyticsTotals {
   today: { sessions: number; cost: number; tokens: number; tool_calls: number };
   window: { sessions: number; cost: number; tokens: number; tool_calls: number };
