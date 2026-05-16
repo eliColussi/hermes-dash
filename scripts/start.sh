@@ -137,7 +137,10 @@ if [ -n "$HERMES_BIN_PATH" ]; then
   echo "[start] hermes found at $HERMES_BIN_PATH — starting gateway with api_server on :$API_SERVER_PORT"
   (
     while true; do
-      "$HERMES_BIN_PATH" gateway || echo "[start] hermes gateway exited; restarting in 5s"
+      # `gateway run` is the foreground subcommand — bare `gateway` just
+      # prints help and exits 0, which would tight-loop the restart wrapper.
+      "$HERMES_BIN_PATH" gateway run 2>&1 | sed 's/^/[gateway] /' || true
+      echo "[start] hermes gateway exited; restarting in 5s"
       sleep 5
     done
   ) &
