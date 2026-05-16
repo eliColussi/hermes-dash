@@ -76,23 +76,45 @@ def status() -> dict:
 
 
 @router.get("/toolkits")
-def list_toolkits(limit: int = 100) -> dict:
+def list_toolkits() -> dict:
+    """Returns the full Composio catalog with logos. Walks pagination so the
+    UI gets all ~1000+ toolkits in one call (small payload, cached well)."""
     client = _require_client()
-    try:
-        resp = client.toolkits.list()
-    except Exception as exc:
-        raise HTTPException(502, f"Composio API error: {type(exc).__name__}: {exc}")
-    items = []
-    for tk in resp.items[:limit]:
-        meta = getattr(tk, "meta", None)
-        meta_dict = meta if isinstance(meta, dict) else {}
-        items.append({
-            "slug": getattr(tk, "slug", None),
-            "name": getattr(tk, "name", None) or getattr(tk, "slug", ""),
-            "description": meta_dict.get("description", ""),
-            "logo": meta_dict.get("logo", ""),
-            "categories": getattr(tk, "categories", []) or [],
-        })
+    items: list[dict] = []
+    cursor: Optional[str] = None
+    safety = 20  # at 1000 per page that's 20k toolkits — way more than reality
+    while safety > 0:
+        try:
+            resp = (
+                client.toolkits.list(cursor=cursor) if cursor else client.toolkits.list()
+            )
+        except Exception as exc:
+            raise HTTPException(502, f"Composio API error: {type(exc).__name__}: {exc}")
+        for tk in resp.items:
+            # tk.meta is a Pydantic model (ItemMeta), not a dict
+            meta = getattr(tk, "meta", None)
+            logo = ""
+            description = ""
+            categories: list[str] = []
+            if meta is not None:
+                logo = getattr(meta, "logo", "") or ""
+                description = getattr(meta, "description", "") or ""
+                cats = getattr(meta, "categories", []) or []
+                for c in cats:
+                    name = getattr(c, "name", None) or getattr(c, "id", None)
+                    if name:
+                        categories.append(name)
+            items.append({
+                "slug": getattr(tk, "slug", None),
+                "name": getattr(tk, "name", None) or getattr(tk, "slug", ""),
+                "description": description,
+                "logo": logo,
+                "categories": categories,
+            })
+        cursor = getattr(resp, "next_cursor", None)
+        if not cursor:
+            break
+        safety -= 1
     return {"items": items, "total": len(items)}
 
 

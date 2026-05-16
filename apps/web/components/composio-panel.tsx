@@ -1,13 +1,13 @@
 "use client";
 
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { Check, ExternalLink, Plug, Trash2, X } from "lucide-react";
+import { Check, Plug, Trash2, X } from "lucide-react";
 import { useMemo, useState } from "react";
 import { ComposioToolkit, composio } from "@/lib/api";
 
-// Popular toolkits we promote in the "Connect a new app" picker. Anything not
-// in this list is still reachable via the search field.
-const POPULAR = [
+// Slugs we float to the top of the picker when the search box is empty.
+// Anything not in this list still appears in the grid below it.
+const FEATURED = [
   "gmail", "googlecalendar", "googledrive", "slack", "notion", "github",
   "linear", "hubspot", "stripe", "calendly", "airtable", "asana",
   "trello", "zoom", "discord", "intercom", "salesforce", "shopify",
@@ -20,15 +20,15 @@ export function ComposioPanel() {
     queryKey: ["composio-toolkits"],
     queryFn: composio.toolkits,
     enabled: status.data?.configured === true,
+    staleTime: 10 * 60 * 1000, // catalog rarely changes; cache for 10 min
   });
   const connections = useQuery({
     queryKey: ["composio-connections"],
     queryFn: composio.connections,
     enabled: status.data?.configured === true,
-    refetchInterval: 5000, // pick up new OAuth completions automatically
+    refetchInterval: 5000,
   });
 
-  const [search, setSearch] = useState("");
   const [picker, setPicker] = useState(false);
 
   const connectMut = useMutation({
@@ -49,33 +49,19 @@ export function ComposioPanel() {
     onSuccess: () => qc.invalidateQueries({ queryKey: ["composio-connections"] }),
   });
 
-  const filtered = useMemo(() => {
-    const list = toolkits.data?.items ?? [];
-    const q = search.trim().toLowerCase();
-    if (!q) {
-      const popMap = new Map(POPULAR.map((s, i) => [s, i]));
-      return [...list]
-        .filter((t) => popMap.has(t.slug))
-        .sort((a, b) => (popMap.get(a.slug) ?? 99) - (popMap.get(b.slug) ?? 99));
-    }
-    return list.filter(
-      (t) => t.slug.includes(q) || t.name.toLowerCase().includes(q),
-    );
-  }, [toolkits.data, search]);
-
   if (status.isLoading) return null;
 
   if (!status.data?.configured) {
     return (
       <div className="card p-5 mb-4">
         <div className="flex items-center gap-3 mb-2">
-          <Plug className="w-5 h-5 link-accent" />
-          <div className="font-medium">Composio (250+ apps)</div>
+          <Plug className="w-5 h-5 text-accent" />
+          <div className="font-medium">Apps</div>
         </div>
         <div className="text-sm text-muted">
-          Set <code>COMPOSIO_API_KEY</code> in your Railway environment to
-          connect Gmail, Slack, Stripe, HubSpot, and 250+ other apps without
-          writing adapters. The key unlocks every toolkit at once.
+          Your team needs to activate this. Send them a message and they&apos;ll
+          have you connecting Gmail, Slack, Stripe, HubSpot, and 250+ other
+          apps in a few minutes.
         </div>
       </div>
     );
@@ -83,70 +69,67 @@ export function ComposioPanel() {
 
   return (
     <div className="card p-5 mb-4">
-      <div className="flex items-start justify-between mb-3">
+      <div className="flex items-start justify-between mb-4">
         <div>
-          <div className="flex items-center gap-2 font-medium">
-            <Plug className="w-5 h-5 link-accent" />
-            Composio
-            <span className="text-xs text-ok ml-1">✓ Connected</span>
+          <div className="flex items-center gap-2 font-medium text-base">
+            <Plug className="w-5 h-5 text-accent" />
+            Apps
+            <span className="chip chip-accent text-[10px] ml-1">Active</span>
           </div>
           <div className="text-xs text-muted mt-1">
-            User: <code>{status.data.user_id}</code> · Click Connect to add an
-            app; you'll be redirected to Composio's OAuth flow.
+            Connect Gmail, Slack, Stripe — over a thousand apps your agents can
+            read, write and act on.
           </div>
         </div>
-        <button
-          onClick={() => setPicker(true)}
-          className="btn-primary"
-        >
+        <button onClick={() => setPicker(true)} className="btn-primary">
           + Connect app
         </button>
       </div>
 
       {/* Connected apps */}
-      <div className="mt-4">
-        <div className="text-xs uppercase text-muted mb-2 tracking-wider">
+      <div className="mt-2">
+        <div className="text-[11px] uppercase tracking-[0.14em] text-muted mb-2">
           Connected ({connections.data?.items.length ?? 0})
         </div>
         {(connections.data?.items.length ?? 0) === 0 ? (
           <div className="text-sm text-muted py-3">
-            No apps connected yet. Click <strong>+ Connect app</strong> to start.
+            Nothing connected yet. Click <strong>+ Connect app</strong> to start.
           </div>
         ) : (
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-2">
-            {(connections.data?.items ?? []).map((c) => (
-              <div
-                key={c.id}
-                className="flex items-center justify-between px-3 py-2 rounded-lg border border-line bg-[var(--bg)]"
-              >
-                <div className="min-w-0">
-                  <div className="text-sm font-medium truncate">{c.toolkit}</div>
-                  <div className="text-[10px] text-muted">
-                    {c.status} · {c.id.slice(0, 12)}
-                  </div>
-                </div>
-                <button
-                  onClick={() => {
-                    if (confirm(`Disconnect ${c.toolkit}?`))
-                      disconnectMut.mutate(c.id);
-                  }}
-                  className="p-1.5 hover:bg-surface-3 text-bad rounded"
-                  title="Disconnect"
+            {(connections.data?.items ?? []).map((c) => {
+              const logo = `https://logos.composio.dev/api/${c.toolkit}`;
+              return (
+                <div
+                  key={c.id}
+                  className="flex items-center gap-3 px-3 py-2 rounded-lg border border-line bg-surface-2"
                 >
-                  <Trash2 className="w-3.5 h-3.5" />
-                </button>
-              </div>
-            ))}
+                  <ToolkitLogo slug={c.toolkit} src={logo} size={28} />
+                  <div className="min-w-0 flex-1">
+                    <div className="text-sm font-medium truncate capitalize">{c.toolkit}</div>
+                    <div className="text-[10px] text-muted">{c.status}</div>
+                  </div>
+                  <button
+                    onClick={() => {
+                      if (confirm(`Disconnect ${c.toolkit}?`))
+                        disconnectMut.mutate(c.id);
+                    }}
+                    className="p-1.5 hover:bg-surface-3 text-bad rounded"
+                    title="Disconnect"
+                  >
+                    <Trash2 className="w-3.5 h-3.5" />
+                  </button>
+                </div>
+              );
+            })}
           </div>
         )}
       </div>
 
       {picker && (
         <ToolkitPicker
-          toolkits={filtered}
+          toolkits={toolkits.data?.items ?? []}
           loading={toolkits.isLoading}
-          search={search}
-          onSearchChange={setSearch}
           connecting={connectMut.isPending ? connectMut.variables ?? null : null}
           onClose={() => setPicker(false)}
           onConnect={(slug) => connectMut.mutate(slug)}
@@ -160,8 +143,6 @@ export function ComposioPanel() {
 function ToolkitPicker({
   toolkits,
   loading,
-  search,
-  onSearchChange,
   connecting,
   connectedSlugs,
   onConnect,
@@ -169,27 +150,49 @@ function ToolkitPicker({
 }: {
   toolkits: ComposioToolkit[];
   loading: boolean;
-  search: string;
-  onSearchChange: (s: string) => void;
   connecting: string | null;
   connectedSlugs: Set<string>;
   onConnect: (slug: string) => void;
   onClose: () => void;
 }) {
+  const [search, setSearch] = useState("");
+
+  // Always render the entire catalog. When the search box is empty, sort
+  // featured apps to the top; otherwise alphabetical filter on slug+name.
+  const list = useMemo(() => {
+    const q = search.trim().toLowerCase();
+    const all = toolkits;
+    if (!q) {
+      const featuredSet = new Set(FEATURED);
+      const featured = FEATURED
+        .map((s) => all.find((t) => t.slug === s))
+        .filter((t): t is ComposioToolkit => !!t);
+      const rest = all
+        .filter((t) => !featuredSet.has(t.slug))
+        .sort((a, b) => a.name.localeCompare(b.name));
+      return [...featured, ...rest];
+    }
+    return all
+      .filter((t) => t.slug.includes(q) || t.name.toLowerCase().includes(q))
+      .sort((a, b) => a.name.localeCompare(b.name));
+  }, [toolkits, search]);
+
   return (
-    <div className="fixed inset-0 z-50 bg-black/40 flex items-center justify-center p-4" onClick={onClose}>
+    <div className="fixed inset-0 z-50 bg-black/50 backdrop-blur-sm flex items-center justify-center p-4" onClick={onClose}>
       <div
         onClick={(e) => e.stopPropagation()}
-        className="bg-[var(--surface)] border border-line rounded-2xl max-w-2xl w-full max-h-[80vh] flex flex-col"
+        className="bg-surface border border-line rounded-2xl shadow-2xl max-w-4xl w-full max-h-[85vh] flex flex-col"
       >
         <div className="flex items-center justify-between p-5 border-b border-line">
           <div>
-            <div className="font-semibold">Connect an app</div>
+            <div className="font-display text-xl tracking-tight">Connect an app</div>
             <div className="text-xs text-muted mt-1">
-              Pick a toolkit. You'll be sent to Composio to authorize it.
+              {toolkits.length > 0
+                ? `Pick from ${toolkits.length.toLocaleString()} apps. You'll be sent to authorize it.`
+                : "Loading apps…"}
             </div>
           </div>
-          <button onClick={onClose} className="p-1 hover:bg-black/5 rounded">
+          <button onClick={onClose} className="p-1 hover:bg-surface-3 rounded">
             <X className="w-4 h-4" />
           </button>
         </div>
@@ -197,22 +200,22 @@ function ToolkitPicker({
         <div className="p-4 border-b border-line">
           <input
             value={search}
-            onChange={(e) => onSearchChange(e.target.value)}
-            placeholder="Search all 250+ apps…"
-            className="w-full px-3 py-2 rounded-lg border border-line bg-[var(--bg)] text-sm"
+            onChange={(e) => setSearch(e.target.value)}
+            placeholder="Search apps…"
+            className="input"
             autoFocus
           />
-          {!search && (
-            <div className="text-[10px] text-muted mt-1">
-              Showing popular apps. Type to search the full catalog.
+          {search && (
+            <div className="text-[10px] text-muted mt-2">
+              {list.length.toLocaleString()} matches
             </div>
           )}
         </div>
 
         <div className="flex-1 overflow-y-auto p-4">
           {loading && <div className="text-sm text-muted">Loading…</div>}
-          <div className="grid grid-cols-2 md:grid-cols-3 gap-2">
-            {toolkits.map((t) => {
+          <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 gap-2">
+            {list.map((t) => {
               const isConnected = connectedSlugs.has(t.slug);
               const isConnecting = connecting === t.slug;
               return (
@@ -220,38 +223,57 @@ function ToolkitPicker({
                   key={t.slug}
                   disabled={isConnecting}
                   onClick={() => onConnect(t.slug)}
-                  className="flex flex-col items-start gap-1 p-3 rounded-lg border border-line hover:border-blue-500 hover:bg-blue-50/40 dark:hover:bg-blue-950/40 transition text-left disabled:opacity-50"
+                  className="group flex items-center gap-3 p-3 rounded-xl border border-line bg-surface hover:border-accent/40 hover:bg-accent-soft/40 transition text-left disabled:opacity-50"
+                  title={t.description || t.name}
                 >
-                  <div className="flex items-center gap-2 w-full">
-                    {t.logo ? (
-                      // eslint-disable-next-line @next/next/no-img-element
-                      <img src={t.logo} alt="" className="w-5 h-5 rounded" />
-                    ) : (
-                      <Plug className="w-4 h-4 text-muted" />
-                    )}
-                    <span className="text-sm font-medium flex-1 truncate">{t.name}</span>
-                    {isConnected && <Check className="w-3.5 h-3.5 text-ok" />}
+                  <ToolkitLogo slug={t.slug} src={t.logo} size={32} />
+                  <div className="flex-1 min-w-0">
+                    <div className="text-sm font-medium truncate">{t.name}</div>
+                    <div className="text-[10px] text-muted truncate">
+                      {isConnecting ? "Opening…" : t.slug}
+                    </div>
                   </div>
-                  <div className="text-[10px] text-muted flex items-center gap-1">
-                    {isConnecting ? (
-                      "Opening OAuth…"
-                    ) : (
-                      <>
-                        Connect <ExternalLink className="w-2.5 h-2.5" />
-                      </>
-                    )}
-                  </div>
+                  {isConnected && (
+                    <Check className="w-3.5 h-3.5 text-ok shrink-0" />
+                  )}
                 </button>
               );
             })}
-            {!loading && toolkits.length === 0 && (
+            {!loading && list.length === 0 && (
               <div className="text-sm text-muted col-span-full py-6 text-center">
-                No matching toolkits.
+                No matching apps.
               </div>
             )}
           </div>
         </div>
       </div>
     </div>
+  );
+}
+
+function ToolkitLogo({ slug, src, size }: { slug: string; src: string; size: number }) {
+  const [errored, setErrored] = useState(false);
+  if (!src || errored) {
+    return (
+      <div
+        className="rounded-md bg-surface-3 border border-line flex items-center justify-center text-[10px] uppercase font-semibold text-muted shrink-0"
+        style={{ width: size, height: size }}
+      >
+        {slug.slice(0, 2)}
+      </div>
+    );
+  }
+  return (
+    // eslint-disable-next-line @next/next/no-img-element
+    <img
+      src={src}
+      alt={slug}
+      width={size}
+      height={size}
+      onError={() => setErrored(true)}
+      className="rounded-md bg-white border border-line shrink-0 object-contain p-0.5"
+      style={{ width: size, height: size }}
+      loading="lazy"
+    />
   );
 }
