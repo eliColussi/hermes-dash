@@ -121,6 +121,41 @@ export interface SettingsView {
   env: Record<string, string>;
 }
 
+// Composio
+export interface ComposioToolkit {
+  slug: string;
+  name: string;
+  description: string;
+  logo: string;
+  categories: string[];
+}
+export interface ComposioConnection {
+  id: string;
+  toolkit: string;
+  status: string;
+  created_at: string;
+}
+export interface ComposioStatus {
+  configured: boolean;
+  user_id: string;
+  init_error: string | null;
+}
+
+export const composio = {
+  status: () => req<ComposioStatus>("/api/composio/status"),
+  toolkits: () =>
+    req<{ items: ComposioToolkit[]; total: number }>("/api/composio/toolkits"),
+  connections: () =>
+    req<{ items: ComposioConnection[]; total: number }>("/api/composio/connections"),
+  connect: (toolkit: string) =>
+    req<{ toolkit: string; redirect_url: string; connection_id: string }>(
+      "/api/composio/connect",
+      { method: "POST", body: JSON.stringify({ toolkit }) },
+    ),
+  disconnect: (id: string) =>
+    fetch(`/api/composio/connections/${id}`, { method: "DELETE" }),
+};
+
 export interface Integration {
   id: string;
   label: string;

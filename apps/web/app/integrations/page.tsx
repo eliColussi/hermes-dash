@@ -4,6 +4,7 @@ import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { Play, Square } from "lucide-react";
 import { useState } from "react";
 import { Integration, api } from "@/lib/api";
+import { ComposioPanel } from "@/components/composio-panel";
 
 export default function IntegrationsPage() {
   const qc = useQueryClient();
@@ -25,6 +26,8 @@ export default function IntegrationsPage() {
       <p className="text-sm text-muted mt-1 mb-6">
         Connect your agents to Slack, Telegram, and Discord via the HERMÉS gateway.
       </p>
+
+      <ComposioPanel />
 
       <div className="card p-5 mb-8 flex items-center justify-between">
         <div>
