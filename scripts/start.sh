@@ -5,6 +5,25 @@ set -euo pipefail
 mkdir -p "${HERMES_HOME:-/data/hermes}" "${STAFFROOM_HOME:-/data/staffroom}"
 mkdir -p "${HERMES_HOME:-/data/hermes}/plugins"
 
+# Persistence check — same logic the bridge uses, surfaced loudly in Railway
+# logs so an operator never silently runs ephemeral.
+if [ -d /data ]; then
+  DATA_DEV="$(stat -c '%d' /data 2>/dev/null || echo '')"
+  ROOT_DEV="$(stat -c '%d' / 2>/dev/null || echo '')"
+  if [ -n "$DATA_DEV" ] && [ "$DATA_DEV" = "$ROOT_DEV" ]; then
+    echo ""
+    echo "========================================================================"
+    echo "⚠️  PERSISTENCE NOT CONFIGURED — DATA WILL BE LOST ON NEXT REDEPLOY"
+    echo "========================================================================"
+    echo "   /data is on the container's ephemeral filesystem."
+    echo "   Mount a Railway Volume at /data (Service → Volumes → New Volume)."
+    echo "========================================================================"
+    echo ""
+  else
+    echo "[start] persistence: OK (/data is a real volume mount)"
+  fi
+fi
+
 # Symlink our shipped plugins into HERMÉS's user plugin dir so they auto-load
 # without bloating the vendored hermes-agent tree. Idempotent.
 PLUGIN_NAMES=""

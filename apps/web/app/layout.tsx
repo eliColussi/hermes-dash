@@ -1,6 +1,7 @@
 import "./globals.css";
 import type { Metadata } from "next";
 import { Fraunces, Inter, JetBrains_Mono } from "next/font/google";
+import { PersistenceBanner } from "@/components/persistence-banner";
 import { Sidebar } from "@/components/sidebar";
 import { Topbar } from "@/components/topbar";
 import { QueryProvider } from "@/components/query-provider";
@@ -38,12 +39,15 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
     <html lang="en" className={`${sans.variable} ${display.variable} ${mono.variable}`}>
       <body className="font-sans antialiased">
         <QueryProvider>
-          <div className="flex h-screen">
-            <Sidebar />
-            <main className="flex-1 flex flex-col overflow-hidden">
-              <Topbar />
-              <div className="flex-1 overflow-y-auto p-8">{children}</div>
-            </main>
+          <div className="flex flex-col h-screen">
+            <PersistenceBanner />
+            <div className="flex flex-1 overflow-hidden">
+              <Sidebar />
+              <main className="flex-1 flex flex-col overflow-hidden">
+                <Topbar />
+                <div className="flex-1 overflow-y-auto p-8">{children}</div>
+              </main>
+            </div>
           </div>
         </QueryProvider>
       </body>

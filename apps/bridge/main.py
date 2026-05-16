@@ -6,7 +6,7 @@ import os
 from fastapi import Depends, FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
-from . import auth, vault
+from . import auth, persistence, vault
 from .config import ensure_dirs
 from .routers import activity, agents, analytics, approvals, audit, capabilities, chat, composio, goals, integrations, logs, overview, schedules, settings, skills, tasks
 from .routers import vault as vault_router
@@ -53,6 +53,7 @@ app.include_router(chat.router)  # chat router enforces its own auth
 @app.on_event("startup")
 def _startup() -> None:
     ensure_dirs()
+    persistence.warn_at_startup()
     if auth.is_disabled():
         print("⚠️  STAFFROOM_AUTH_DISABLED=1 — running without auth (dev only)")
     else:
@@ -67,4 +68,8 @@ def _startup() -> None:
 
 @app.get("/api/health")
 def health() -> dict:
-    return {"status": "ok", "auth_disabled": auth.is_disabled()}
+    return {
+        "status": "ok",
+        "auth_disabled": auth.is_disabled(),
+        "persistence": persistence.status(),
+    }
