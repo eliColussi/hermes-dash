@@ -63,10 +63,27 @@ export function AgentCard({ agent, onChange }: { agent: Agent; onChange: () => v
         {agent.description || agent.role}
       </div>
 
-      <div className="flex items-center gap-2">
+      <div className="flex items-center gap-1.5 flex-wrap">
         <span className="text-xs px-2 py-1 rounded-full bg-[var(--bg)] border border-line">
           {agent.organization}
         </span>
+        {(agent.toolsets ?? []).map((t) => (
+          <span
+            key={t}
+            className="text-[10px] font-mono px-2 py-1 rounded-full bg-blue-50 text-blue-700 border border-blue-100 dark:bg-blue-950 dark:text-blue-300 dark:border-blue-900"
+            title="Toolset"
+          >
+            {t}
+          </span>
+        ))}
+        {agent.model && (
+          <span
+            className="text-[10px] font-mono px-2 py-1 rounded-full bg-[var(--bg)] border border-line text-muted truncate max-w-[140px]"
+            title={agent.model}
+          >
+            {agent.model.split("/").pop()}
+          </span>
+        )}
       </div>
 
       <div className="text-xs text-muted capitalize">
