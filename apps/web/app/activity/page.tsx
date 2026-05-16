@@ -1,55 +1,192 @@
 "use client";
 
 import { useQuery } from "@tanstack/react-query";
-import { api } from "@/lib/api";
+import { useState } from "react";
+import { AuditEntry, api, audit } from "@/lib/api";
+
+type View = "sessions" | "audit";
+
+const EVENT_BADGE: Record<string, string> = {
+  session_start: "bg-blue-50 text-blue-700",
+  session_end: "bg-gray-100 text-gray-700",
+  tool_call: "bg-purple-50 text-purple-700",
+  approval_requested: "bg-orange-50 text-orange-700",
+  approval_responded: "bg-green-50 text-green-700",
+};
 
 export default function ActivityPage() {
-  const q = useQuery({ queryKey: ["activity"], queryFn: () => api.activity(100) });
+  const [view, setView] = useState<View>("sessions");
 
   return (
     <div className="max-w-6xl mx-auto">
-      <h1 className="text-3xl font-semibold tracking-tight">Activity</h1>
-      <p className="text-sm text-muted mt-1 mb-6">Recent HERMÉS sessions.</p>
-
-      <div className="card overflow-hidden">
-        <table className="w-full text-sm">
-          <thead className="bg-[var(--bg)] text-muted text-xs uppercase tracking-wider">
-            <tr>
-              <th className="text-left px-4 py-3">Title</th>
-              <th className="text-left px-4 py-3">Source</th>
-              <th className="text-left px-4 py-3">Model</th>
-              <th className="text-right px-4 py-3">Msgs</th>
-              <th className="text-right px-4 py-3">Tools</th>
-              <th className="text-right px-4 py-3">Cost</th>
-              <th className="text-left px-4 py-3">Started</th>
-            </tr>
-          </thead>
-          <tbody className="divide-y divide-line">
-            {(q.data ?? []).map((a) => (
-              <tr key={a.session_id}>
-                <td className="px-4 py-3">{a.title ?? a.session_id.slice(0, 8)}</td>
-                <td className="px-4 py-3">{a.source}</td>
-                <td className="px-4 py-3 text-muted">{a.model ?? "—"}</td>
-                <td className="px-4 py-3 text-right">{a.message_count}</td>
-                <td className="px-4 py-3 text-right">{a.tool_call_count}</td>
-                <td className="px-4 py-3 text-right">
-                  {a.cost_usd != null ? `$${a.cost_usd.toFixed(4)}` : "—"}
-                </td>
-                <td className="px-4 py-3 text-muted">
-                  {new Date(a.started_at * 1000).toLocaleString()}
-                </td>
-              </tr>
-            ))}
-            {(q.data ?? []).length === 0 && !q.isLoading && (
-              <tr>
-                <td colSpan={7} className="px-4 py-8 text-center text-muted">
-                  No sessions yet. Start an agent or run `hermes chat` to populate.
-                </td>
-              </tr>
-            )}
-          </tbody>
-        </table>
+      <div className="flex items-center justify-between mb-6">
+        <div>
+          <h1 className="text-3xl font-semibold tracking-tight">Activity</h1>
+          <p className="text-sm text-muted mt-1">
+            {view === "sessions"
+              ? "Recent HERMÉS sessions."
+              : "Append-only audit trail. Every tool call, approval, and lifecycle event."}
+          </p>
+        </div>
+        <div className="flex p-1 bg-[var(--bg)] border border-line rounded-lg text-sm">
+          <ViewToggle current={view} option="sessions" onChange={setView}>
+            Sessions
+          </ViewToggle>
+          <ViewToggle current={view} option="audit" onChange={setView}>
+            Audit log
+          </ViewToggle>
+        </div>
       </div>
+
+      {view === "sessions" ? <SessionsTable /> : <AuditTable />}
     </div>
+  );
+}
+
+function ViewToggle({
+  current,
+  option,
+  onChange,
+  children,
+}: {
+  current: View;
+  option: View;
+  onChange: (v: View) => void;
+  children: React.ReactNode;
+}) {
+  const active = current === option;
+  return (
+    <button
+      onClick={() => onChange(option)}
+      className={`px-3 py-1.5 rounded-md transition ${
+        active ? "bg-white dark:bg-[var(--surface)] shadow-sm" : "text-muted"
+      }`}
+    >
+      {children}
+    </button>
+  );
+}
+
+function SessionsTable() {
+  const q = useQuery({ queryKey: ["activity"], queryFn: () => api.activity(100) });
+
+  return (
+    <div className="card overflow-hidden">
+      <table className="w-full text-sm">
+        <thead className="bg-[var(--bg)] text-muted text-xs uppercase tracking-wider">
+          <tr>
+            <th className="text-left px-4 py-3">Title</th>
+            <th className="text-left px-4 py-3">Source</th>
+            <th className="text-left px-4 py-3">Model</th>
+            <th className="text-right px-4 py-3">Msgs</th>
+            <th className="text-right px-4 py-3">Tools</th>
+            <th className="text-right px-4 py-3">Cost</th>
+            <th className="text-left px-4 py-3">Started</th>
+          </tr>
+        </thead>
+        <tbody className="divide-y divide-line">
+          {(q.data ?? []).map((a) => (
+            <tr key={a.session_id}>
+              <td className="px-4 py-3">{a.title ?? a.session_id.slice(0, 8)}</td>
+              <td className="px-4 py-3">{a.source}</td>
+              <td className="px-4 py-3 text-muted">{a.model ?? "—"}</td>
+              <td className="px-4 py-3 text-right">{a.message_count}</td>
+              <td className="px-4 py-3 text-right">{a.tool_call_count}</td>
+              <td className="px-4 py-3 text-right">
+                {a.cost_usd != null ? `$${a.cost_usd.toFixed(4)}` : "—"}
+              </td>
+              <td className="px-4 py-3 text-muted">
+                {new Date(a.started_at * 1000).toLocaleString()}
+              </td>
+            </tr>
+          ))}
+          {(q.data ?? []).length === 0 && !q.isLoading && (
+            <tr>
+              <td colSpan={7} className="px-4 py-8 text-center text-muted">
+                No sessions yet.
+              </td>
+            </tr>
+          )}
+        </tbody>
+      </table>
+    </div>
+  );
+}
+
+function AuditTable() {
+  const days = useQuery({ queryKey: ["audit-days"], queryFn: audit.days });
+  const [date, setDate] = useState<string | undefined>(undefined);
+  const [eventFilter, setEventFilter] = useState<string>("");
+  const q = useQuery({
+    queryKey: ["audit", date, eventFilter],
+    queryFn: () =>
+      audit.list({ date, limit: 200, event: eventFilter || undefined }),
+    refetchInterval: 3000,
+  });
+
+  return (
+    <>
+      <div className="flex gap-2 mb-3 flex-wrap">
+        <select
+          value={date ?? ""}
+          onChange={(e) => setDate(e.target.value || undefined)}
+          className="px-3 py-1.5 text-sm rounded-lg border border-line bg-[var(--surface)]"
+        >
+          <option value="">Today</option>
+          {(days.data?.days ?? []).map((d) => (
+            <option key={d} value={d}>
+              {d}
+            </option>
+          ))}
+        </select>
+        <select
+          value={eventFilter}
+          onChange={(e) => setEventFilter(e.target.value)}
+          className="px-3 py-1.5 text-sm rounded-lg border border-line bg-[var(--surface)]"
+        >
+          <option value="">All events</option>
+          <option value="session_start">session_start</option>
+          <option value="session_end">session_end</option>
+          <option value="tool_call">tool_call</option>
+          <option value="approval_requested">approval_requested</option>
+          <option value="approval_responded">approval_responded</option>
+        </select>
+        <span className="text-xs text-muted self-center ml-auto">
+          {q.data?.count ?? 0} events · auto-refresh
+        </span>
+      </div>
+      <div className="card overflow-hidden">
+        {(q.data?.items ?? []).length === 0 && !q.isLoading && (
+          <div className="p-6 text-sm text-muted">
+            No audit events for this day. The staffroom-audit plugin records
+            every session/tool/approval lifecycle event here.
+          </div>
+        )}
+        <ul className="divide-y divide-line">
+          {(q.data?.items ?? []).slice().reverse().map((e, i) => (
+            <AuditRow key={i} entry={e} />
+          ))}
+        </ul>
+      </div>
+    </>
+  );
+}
+
+function AuditRow({ entry }: { entry: AuditEntry }) {
+  const badge = EVENT_BADGE[entry.event] ?? "bg-gray-50 text-gray-600";
+  const time = new Date(entry.ts).toLocaleTimeString();
+  const { ts, event, ...rest } = entry;
+  return (
+    <li className="px-4 py-3 flex items-start gap-3 hover:bg-black/[0.02] dark:hover:bg-white/[0.02]">
+      <span className={`text-[10px] uppercase tracking-wider px-2 py-1 rounded ${badge} whitespace-nowrap`}>
+        {event}
+      </span>
+      <div className="flex-1 min-w-0">
+        <pre className="text-xs text-muted whitespace-pre-wrap break-words font-mono">
+          {JSON.stringify(rest, null, 0)}
+        </pre>
+      </div>
+      <span className="text-[10px] text-muted whitespace-nowrap">{time}</span>
+    </li>
   );
 }

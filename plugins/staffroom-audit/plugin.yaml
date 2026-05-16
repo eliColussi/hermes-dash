@@ -1,0 +1,12 @@
+name: staffroom-audit
+version: 0.1.0
+description: "Append-only audit trail for every agent lifecycle event. Powers the Activity feed in Staff Room OS and is the substrate for the Approvals tab. Daily JSONL files under $STAFFROOM_HOME/audit/."
+author: Staff Room OS
+kind: standalone
+hooks:
+  - on_session_start
+  - on_session_end
+  - pre_tool_call
+  - post_tool_call
+  - pre_approval_request
+  - post_approval_response

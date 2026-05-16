@@ -197,6 +197,27 @@ export interface Webhook {
   created_at: string | null;
 }
 
+// Audit log
+export interface AuditEntry {
+  ts: string;
+  event: string;
+  [key: string]: unknown;
+}
+
+export const audit = {
+  list: (params: { date?: string; limit?: number; event?: string } = {}) => {
+    const qs = new URLSearchParams();
+    if (params.date) qs.set("date", params.date);
+    if (params.limit) qs.set("limit", String(params.limit));
+    if (params.event) qs.set("event", params.event);
+    const q = qs.toString();
+    return req<{ date: string; items: AuditEntry[]; count: number }>(
+      "/api/audit" + (q ? `?${q}` : ""),
+    );
+  },
+  days: () => req<{ days: string[] }>("/api/audit/days"),
+};
+
 export const webhooks = {
   list: () => req<{ items: Webhook[]; total: number; base_url: string }>("/api/webhooks"),
   create: (body: {
