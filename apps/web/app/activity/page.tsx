@@ -69,46 +69,145 @@ function ViewToggle({
 
 function SessionsTable() {
   const q = useQuery({ queryKey: ["activity"], queryFn: () => api.activity(100) });
+  const [openId, setOpenId] = useState<string | null>(null);
 
   return (
-    <div className="card overflow-hidden">
-      <table className="w-full text-sm">
-        <thead className="bg-[var(--bg)] text-muted text-xs uppercase tracking-wider">
-          <tr>
-            <th className="text-left px-4 py-3">Title</th>
-            <th className="text-left px-4 py-3">Source</th>
-            <th className="text-left px-4 py-3">Model</th>
-            <th className="text-right px-4 py-3">Msgs</th>
-            <th className="text-right px-4 py-3">Tools</th>
-            <th className="text-right px-4 py-3">Cost</th>
-            <th className="text-left px-4 py-3">Started</th>
-          </tr>
-        </thead>
-        <tbody className="divide-y divide-line">
-          {(q.data ?? []).map((a) => (
-            <tr key={a.session_id}>
-              <td className="px-4 py-3">{a.title ?? a.session_id.slice(0, 8)}</td>
-              <td className="px-4 py-3">{a.source}</td>
-              <td className="px-4 py-3 text-muted">{a.model ?? "—"}</td>
-              <td className="px-4 py-3 text-right">{a.message_count}</td>
-              <td className="px-4 py-3 text-right">{a.tool_call_count}</td>
-              <td className="px-4 py-3 text-right">
-                {a.cost_usd != null ? `$${a.cost_usd.toFixed(4)}` : "—"}
-              </td>
-              <td className="px-4 py-3 text-muted">
-                {new Date(a.started_at * 1000).toLocaleString()}
-              </td>
-            </tr>
-          ))}
-          {(q.data ?? []).length === 0 && !q.isLoading && (
+    <>
+      <div className="card overflow-hidden">
+        <table className="w-full text-sm">
+          <thead className="bg-[var(--bg)] text-muted text-xs uppercase tracking-wider">
             <tr>
-              <td colSpan={7} className="px-4 py-8 text-center text-muted">
-                No sessions yet.
-              </td>
+              <th className="text-left px-4 py-3">Title</th>
+              <th className="text-left px-4 py-3">Source</th>
+              <th className="text-left px-4 py-3">Model</th>
+              <th className="text-right px-4 py-3">Msgs</th>
+              <th className="text-right px-4 py-3">Tools</th>
+              <th className="text-right px-4 py-3">Cost</th>
+              <th className="text-left px-4 py-3">Started</th>
             </tr>
+          </thead>
+          <tbody className="divide-y divide-line">
+            {(q.data ?? []).map((a) => (
+              <tr
+                key={a.session_id}
+                onClick={() => setOpenId(a.session_id)}
+                className="cursor-pointer hover:bg-black/[0.02] dark:hover:bg-white/[0.02]"
+              >
+                <td className="px-4 py-3">{a.title ?? a.session_id.slice(0, 8)}</td>
+                <td className="px-4 py-3">{a.source}</td>
+                <td className="px-4 py-3 text-muted">{a.model ?? "—"}</td>
+                <td className="px-4 py-3 text-right">{a.message_count}</td>
+                <td className="px-4 py-3 text-right">{a.tool_call_count}</td>
+                <td className="px-4 py-3 text-right">
+                  {a.cost_usd != null ? `$${a.cost_usd.toFixed(4)}` : "—"}
+                </td>
+                <td className="px-4 py-3 text-muted">
+                  {new Date(a.started_at * 1000).toLocaleString()}
+                </td>
+              </tr>
+            ))}
+            {(q.data ?? []).length === 0 && !q.isLoading && (
+              <tr>
+                <td colSpan={7} className="px-4 py-8 text-center text-muted">
+                  No sessions yet.
+                </td>
+              </tr>
+            )}
+          </tbody>
+        </table>
+      </div>
+      {openId && <SessionDrawer id={openId} onClose={() => setOpenId(null)} />}
+    </>
+  );
+}
+
+function SessionDrawer({ id, onClose }: { id: string; onClose: () => void }) {
+  const q = useQuery({
+    queryKey: ["session-detail", id],
+    queryFn: () => api.activitySession(id),
+  });
+
+  const session = q.data?.session as Record<string, string | number | null> | undefined;
+  const messages = q.data?.messages ?? [];
+
+  return (
+    <div className="fixed inset-0 z-50 bg-black/40 flex justify-end" onClick={onClose}>
+      <div
+        onClick={(e) => e.stopPropagation()}
+        className="w-[720px] h-full bg-[var(--surface)] border-l border-line flex flex-col"
+      >
+        <div className="flex items-center justify-between p-5 border-b border-line">
+          <div className="min-w-0">
+            <div className="font-semibold truncate">
+              {(session?.title as string) || id}
+            </div>
+            <div className="text-xs text-muted mt-1">
+              {session?.source as string} · {session?.model as string ?? "—"} ·{" "}
+              {messages.length} messages
+            </div>
+          </div>
+          <button onClick={onClose} className="p-1 hover:bg-black/5 rounded">
+            <span className="text-xl leading-none">×</span>
+          </button>
+        </div>
+
+        <div className="p-4 border-b border-line grid grid-cols-2 gap-2 text-xs">
+          {session &&
+            (["estimated_cost_usd", "actual_cost_usd", "input_tokens", "output_tokens", "tool_call_count", "message_count"] as const).map(
+              (k) => (
+                <div key={k}>
+                  <span className="text-muted">{k}: </span>
+                  <span className="font-mono">{String((session as Record<string, unknown>)[k] ?? "—")}</span>
+                </div>
+              ),
+            )}
+        </div>
+
+        <div className="flex-1 overflow-y-auto p-4 space-y-3">
+          {q.isLoading && <div className="text-sm text-muted">Loading…</div>}
+          {messages.map((m) => (
+            <div key={m.id} className="text-xs">
+              <div className="flex items-center gap-2 mb-1">
+                <span
+                  className={`text-[10px] uppercase tracking-wider px-1.5 py-0.5 rounded ${
+                    m.role === "user"
+                      ? "bg-blue-50 text-blue-700"
+                      : m.role === "assistant"
+                      ? "bg-purple-50 text-purple-700"
+                      : m.role === "tool"
+                      ? "bg-amber-50 text-amber-700"
+                      : "bg-gray-100 text-gray-600"
+                  }`}
+                >
+                  {m.role}
+                </span>
+                {m.tool_name && (
+                  <code className="text-[10px] text-muted">{m.tool_name}</code>
+                )}
+                <span className="text-[10px] text-muted ml-auto">
+                  {new Date(m.timestamp * 1000).toLocaleTimeString()}
+                </span>
+              </div>
+              {m.content && (
+                <pre className="whitespace-pre-wrap break-words font-mono p-2 bg-[var(--bg)] rounded border border-line">
+                  {m.content}
+                </pre>
+              )}
+              {m.reasoning && (
+                <details className="mt-1">
+                  <summary className="text-[10px] text-muted cursor-pointer">reasoning</summary>
+                  <pre className="whitespace-pre-wrap break-words font-mono p-2 mt-1 bg-[var(--bg)] rounded border border-line text-muted">
+                    {m.reasoning}
+                  </pre>
+                </details>
+              )}
+            </div>
+          ))}
+          {!q.isLoading && messages.length === 0 && (
+            <div className="text-sm text-muted">No messages on this session.</div>
           )}
-        </tbody>
-      </table>
+        </div>
+      </div>
     </div>
   );
 }

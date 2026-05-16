@@ -85,6 +85,23 @@ export const api = {
   createTask: (body: { agent_id?: string; title: string }) =>
     req<Task>("/api/tasks", { method: "POST", body: JSON.stringify(body) }),
   activity: (limit = 50) => req<ActivityItem[]>(`/api/activity?limit=${limit}`),
+  activitySession: (id: string, limit = 500) =>
+    req<{
+      session: Record<string, unknown>;
+      messages: {
+        id: number;
+        role: string;
+        content: string | null;
+        tool_call_id: string | null;
+        tool_calls: string | null;
+        tool_name: string | null;
+        timestamp: number;
+        token_count: number | null;
+        finish_reason: string | null;
+        reasoning: string | null;
+      }[];
+      message_count: number;
+    }>(`/api/activity/${id}?limit=${limit}`),
   logs: () => req<{ files: { name: string; path: string; size: number }[] }>("/api/logs"),
   tailLog: (name: string, lines = 200) =>
     req<{ name: string; lines: string[] }>(
