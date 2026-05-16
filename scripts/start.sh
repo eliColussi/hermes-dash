@@ -67,13 +67,16 @@ if not model.get("provider") or model.get("provider") == "auto" and not model.ge
     if os.environ.get("OPENROUTER_API_KEY"):
         model["provider"] = "openrouter"
         model["base_url"] = "https://openrouter.ai/api/v1"
-        model.setdefault("default", "anthropic/claude-sonnet-4.6")
-        print("[start] model provider: openrouter (auto-configured from OPENROUTER_API_KEY)")
+        # Haiku 4.5 by default: ~5-10x cheaper per turn than Sonnet/R1 and
+        # plenty smart for most ops tasks. Operators can pin a heavier
+        # model per-agent when they need it.
+        model.setdefault("default", "anthropic/claude-haiku-4.5")
+        print("[start] model provider: openrouter (default: claude-haiku-4.5)")
         changed = True
     elif os.environ.get("ANTHROPIC_API_KEY"):
         model["provider"] = "anthropic"
-        model.setdefault("default", "claude-sonnet-4-6")
-        print("[start] model provider: anthropic (auto-configured from ANTHROPIC_API_KEY)")
+        model.setdefault("default", "claude-haiku-4-5")
+        print("[start] model provider: anthropic (default: claude-haiku-4-5)")
         changed = True
     elif os.environ.get("OPENAI_API_KEY"):
         model["provider"] = "openai"

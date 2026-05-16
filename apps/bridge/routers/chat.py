@@ -330,7 +330,7 @@ async def send_message(thread_id: str, payload: MessageSend) -> dict:
         headers["X-Hermes-Session-Id"] = thread["session_id"]
 
     body = {
-        "model": agent.get("model", "claude-sonnet-4-6"),
+        "model": agent.get("model", "anthropic/claude-haiku-4.5"),
         "messages": [
             {"role": "system", "content": system_prompt},
             {"role": "user", "content": payload.content},

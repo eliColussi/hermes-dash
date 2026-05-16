@@ -69,7 +69,7 @@ export default function AnalyticsPage() {
           <ByList data={q.data?.by_source.map((s) => ({ key: s.source, sessions: s.sessions, cost: s.cost })) ?? []} />
         </Section>
         <Section title="By agent">
-          <ByList data={q.data?.by_agent.map((a) => ({ key: a.agent_id, sessions: a.sessions, cost: null })) ?? []} />
+          <ByList data={q.data?.by_agent.map((a) => ({ key: a.agent_id, sessions: a.sessions, cost: a.cost })) ?? []} />
         </Section>
       </div>
     </div>

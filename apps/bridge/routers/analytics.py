@@ -146,7 +146,9 @@ def _empty_totals() -> dict:
 
 
 def _agent_breakdown(days: int) -> List[dict]:
-    """Walk the last `days` of audit JSONLs, count distinct sessions per agent."""
+    """Walk the last `days` of audit JSONLs, count distinct sessions per
+    agent, then join with state.db so the operator can see actual $ spent
+    per agent — the answer to "which worker is burning my budget?"."""
     if not AUDIT_DIR.exists():
         return []
     today = datetime.utcnow().date()
@@ -172,7 +174,31 @@ def _agent_breakdown(days: int) -> List[dict]:
                     seen.setdefault(evt["agent_id"], set()).add(evt["session_id"])
         except OSError:
             continue
-    return [
-        {"agent_id": k, "sessions": len(v)}
-        for k, v in sorted(seen.items(), key=lambda kv: -len(kv[1]))
-    ]
+
+    # Look up costs for those sessions in state.db (single query, batched).
+    all_session_ids: list[str] = [sid for sids in seen.values() for sid in sids]
+    cost_by_session: dict[str, float] = {}
+    if all_session_ids:
+        with _ro_state() as conn:
+            if conn is not None:
+                # SQLite IN clauses have a parameter cap (~999); chunk if huge.
+                for i in range(0, len(all_session_ids), 500):
+                    chunk = all_session_ids[i : i + 500]
+                    placeholders = ",".join("?" * len(chunk))
+                    rows = conn.execute(
+                        f"""
+                        SELECT id, COALESCE(actual_cost_usd, estimated_cost_usd) AS cost
+                        FROM sessions WHERE id IN ({placeholders})
+                        """,
+                        chunk,
+                    ).fetchall()
+                    for r in rows:
+                        cost_by_session[r["id"]] = float(r["cost"] or 0.0)
+
+    out = []
+    for agent_id, sids in seen.items():
+        cost = sum(cost_by_session.get(sid, 0.0) for sid in sids)
+        out.append({"agent_id": agent_id, "sessions": len(sids), "cost": cost})
+    # Sort by cost desc so the most expensive agent is at the top.
+    out.sort(key=lambda x: -x["cost"])
+    return out

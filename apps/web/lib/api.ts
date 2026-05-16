@@ -295,7 +295,7 @@ export interface AnalyticsView {
   by_day: { day: string; sessions: number; cost: number; tokens: number; tool_calls: number }[];
   by_model: { model: string; sessions: number; cost: number; tokens: number }[];
   by_source: { source: string; sessions: number; cost: number }[];
-  by_agent: { agent_id: string; sessions: number }[];
+  by_agent: { agent_id: string; sessions: number; cost: number }[];
   state_db: "ok" | "not_found";
 }
 
