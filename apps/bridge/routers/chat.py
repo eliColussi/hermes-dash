@@ -86,17 +86,21 @@ def _state_ro() -> Iterator[Optional[sqlite3.Connection]]:
         conn.close()
 
 
-_BRIEFING_END = "<<< END BRIEFING >>>"
-
-
 def _strip_briefing(content: Optional[str]) -> Optional[str]:
-    """If a user message starts with our system-briefing wrapper, return only
-    the operator's actual text. The briefing is plumbing — it shouldn't
-    appear in the chat surface."""
+    """Drop the `[Context: ...]` preamble we prepend on first turn so the
+    operator only sees their actual text in the chat surface."""
     if not content:
         return content
-    if _BRIEFING_END in content:
-        return content.split(_BRIEFING_END, 1)[1].strip()
+    # Older wrapper, kept for messages written before this commit
+    if "<<< END BRIEFING >>>" in content:
+        return content.split("<<< END BRIEFING >>>", 1)[1].strip()
+    # Current wrapper: [Context: ...]\n\n<message>
+    if content.startswith("[Context:"):
+        # Match the bracket pair conservatively — find the closing ] on the
+        # same context line, then strip the blank line after it.
+        end = content.find("]\n")
+        if end > 0:
+            return content[end + 2 :].lstrip()
     return content
 
 
@@ -147,57 +151,28 @@ def _connected_composio_toolkits() -> list[str]:
     return out
 
 
+_TOOLKIT_NICE_NAMES = {
+    "gmail": "Gmail", "googlecalendar": "Google Calendar", "googledrive": "Google Drive",
+    "slack": "Slack", "notion": "Notion", "github": "GitHub", "linear": "Linear",
+    "hubspot": "HubSpot", "stripe": "Stripe", "calendly": "Calendly",
+    "airtable": "Airtable", "asana": "Asana", "trello": "Trello", "zoom": "Zoom",
+    "discord": "Discord", "intercom": "Intercom", "salesforce": "Salesforce",
+    "shopify": "Shopify",
+}
+
+
 def _compose_system_prompt(agent: dict, toolkits: list[str]) -> str:
-    """Stitch the agent's authored prompt with operator-supplied context so
-    the agent never wastes turns discovering what's already known. Also
-    nudges the model toward structured tool calls instead of describing
-    tool calls as text (a common failure mode on multi-step tasks)."""
-    parts: list[str] = []
+    """Minimal context — name, role, connected apps. Modern tool-calling
+    models don't need a 200-token primer on how to use tools; that just
+    bloats every turn and triggers reasoning passes the user doesn't want
+    for a simple "hey what's up"."""
     base = (agent.get("system_prompt") or agent.get("description") or "").strip()
-    if base:
-        parts.append(base)
-
+    name = agent.get("name") or "the agent"
+    parts = [f"You are {name}." + (f" {base}" if base else "")]
     if toolkits:
-        nice = ", ".join(t.replace("googlecalendar", "Google Calendar")
-                          .replace("googledrive", "Google Drive")
-                          .replace("github", "GitHub")
-                          .replace("hubspot", "HubSpot")
-                          .replace("salesforce", "Salesforce")
-                          .replace("gmail", "Gmail")
-                          .replace("slack", "Slack")
-                          .replace("notion", "Notion")
-                          .replace("calendly", "Calendly")
-                          .replace("stripe", "Stripe")
-                          .replace("linear", "Linear")
-                          .replace("airtable", "Airtable")
-                          .replace("intercom", "Intercom")
-                          .replace("zoom", "Zoom")
-                          .replace("trello", "Trello")
-                          .replace("discord", "Discord")
-                          .replace("shopify", "Shopify")
-                          .replace("asana", "Asana")
-                          .title() if " " not in t else t for t in toolkits)
-        parts.append(
-            f"### Tools available to you right now\n"
-            f"You have these apps already connected via Composio (the user "
-            f"linked them in the dashboard): **{nice}**.\n\n"
-            f"To use them, call the `composio_execute` tool with the right "
-            f"action slug. For example, to read Gmail you'd call `composio_execute` "
-            f"with `action='GMAIL_FETCH_EMAILS'`. If you don't know the exact "
-            f"action name for a toolkit, call `composio_list_actions` once with "
-            f"the toolkit slug — do NOT call `composio_list_apps` first, the "
-            f"list above is authoritative."
-        )
-
-    parts.append(
-        "### How to act\n"
-        "When a task requires an external tool, **call the tool directly** "
-        "using your structured tool-calling capability. Do not write out tool "
-        "calls as JSON in your reply — actually invoke them. After getting "
-        "results, respond to the user in plain conversational language with "
-        "the outcome, not the raw payload."
-    )
-    return "\n\n".join(parts)
+        nice = ", ".join(_TOOLKIT_NICE_NAMES.get(t, t.title()) for t in toolkits)
+        parts.append(f"Connected apps available via tools: {nice}.")
+    return " ".join(parts)
 
 
 def _latest_session_for_source(source_tag: str, since: float) -> Optional[str]:
@@ -429,12 +404,10 @@ def send_message(thread_id: str, payload: MessageSend) -> dict:
     if is_first_turn:
         toolkits = _connected_composio_toolkits() if "composio" in (toolsets_list or []) else []
         briefing = _compose_system_prompt(agent, toolkits)
-        query_text = (
-            f"<<< SYSTEM BRIEFING — read this carefully, then act on the user's message below >>>\n\n"
-            f"{briefing}\n\n"
-            f"<<< END BRIEFING >>>\n\n"
-            f"{payload.content}"
-        )
+        # Compact one-paragraph preamble — no headers, no "system briefing"
+        # framing, no behavioural lectures. Modern Claude/GPT models read
+        # this as ambient context and don't burn reasoning passes on it.
+        query_text = f"[Context: {briefing}]\n\n{payload.content}"
     else:
         query_text = payload.content
 

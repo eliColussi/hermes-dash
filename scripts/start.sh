@@ -51,6 +51,16 @@ if os.path.exists(path):
         cfg = yaml.safe_load(f) or {}
 changed = False
 
+# ── Agent defaults: chat is conversational, kill the default reasoning_effort
+#    that adds 5-20s per turn on chain-of-thought models. Operators can crank
+#    it back up by setting HERMES_REASONING_EFFORT=medium / high in Railway.
+agent_cfg = cfg.setdefault("agent", {})
+desired_effort = os.environ.get("HERMES_REASONING_EFFORT", "minimal")
+if agent_cfg.get("reasoning_effort") != desired_effort:
+    agent_cfg["reasoning_effort"] = desired_effort
+    print(f"[start] agent.reasoning_effort = {desired_effort}")
+    changed = True
+
 # ── Model provider (only set if not already configured) ───────────────────
 model = cfg.setdefault("model", {})
 if not model.get("provider") or model.get("provider") == "auto" and not model.get("default"):
