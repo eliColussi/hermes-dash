@@ -15,6 +15,7 @@ import psutil
 from fastapi import APIRouter, HTTPException
 from pydantic import BaseModel
 
+from .. import vault as _vault
 from ..config import HERMES_BIN, HERMES_HOME, STAFFROOM_RUNTIME_DIR, ensure_dirs
 
 router = APIRouter(prefix="/api/integrations", tags=["integrations"])
@@ -155,9 +156,16 @@ def _mask(value: str) -> str:
     return value[:4] + "•" * (len(value) - 8) + value[-4:]
 
 
+def _read_merged() -> dict[str, str]:
+    """.env + vault, vault wins (encrypted source-of-truth when configured)."""
+    merged = _read_env()
+    merged.update(_vault.load_all())
+    return merged
+
+
 @router.get("")
 def list_integrations() -> dict:
-    env = _read_env()
+    env = _read_merged()
     integrations = []
     for slug, meta in PROVIDERS.items():
         configured = all(env.get(f["key"]) for f in meta["fields"] if f["secret"])
@@ -182,6 +190,7 @@ def list_integrations() -> dict:
             "pid": _gateway_pid(),
             "log": GATEWAY_LOG.name,
         },
+        "vault_active": bool(os.environ.get("STAFFROOM_SECRETS_KEY")) or _vault.is_configured(),
     }
 
 
@@ -193,8 +202,15 @@ def save_integration(payload: IntegrationCreds) -> dict:
     filtered = {k: v for k, v in payload.values.items() if k in valid_keys and v != ""}
     if not filtered:
         raise HTTPException(400, "No values provided")
+    # When the operator has opted into encryption (key env var set, OR a
+    # vault file already exists from a prior call), route writes through the
+    # vault. Otherwise fall back to plain .env for backwards compatibility.
+    if os.environ.get("STAFFROOM_SECRETS_KEY") or _vault.is_configured():
+        for k, v in filtered.items():
+            _vault.set_secret(k, v)
+        return {"ok": True, "storage": "vault"}
     _write_env(filtered)
-    return {"ok": True}
+    return {"ok": True, "storage": "env"}
 
 
 @router.post("/gateway/start")
