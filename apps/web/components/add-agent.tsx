@@ -27,7 +27,7 @@ function AddAgentSheet({ onClose, onCreated }: { onClose: () => void; onCreated:
   const [role, setRole] = useState("");
   const [description, setDescription] = useState("");
   const [icon, setIcon] = useState("🤖");
-  const [model, setModel] = useState("anthropic/claude-haiku-4.5");
+  const [model, setModel] = useState("anthropic/claude-sonnet-4.6");
   const [systemPrompt, setSystemPrompt] = useState("");
   const [toolsets, setToolsets] = useState<string[]>(["composio"]);
   const [busy, setBusy] = useState(false);
@@ -136,14 +136,17 @@ function AddAgentSheet({ onClose, onCreated }: { onClose: () => void; onCreated:
 
         <Field label="Model">
           <select value={model} onChange={(e) => setModel(e.target.value)} className="input">
-            <optgroup label="Balanced (recommended for most agents)">
-              <option value="anthropic/claude-haiku-4.5">Claude Haiku 4.5 — fast, cheap, great at tools</option>
-              <option value="anthropic/claude-sonnet-4.6">Claude Sonnet 4.6 — strongest general agent</option>
-              <option value="google/gemini-2.5-flash">Gemini 2.5 Flash — fastest, cheapest, surprisingly capable</option>
+            <optgroup label="Recommended (default)">
+              <option value="anthropic/claude-sonnet-4.6">Claude Sonnet 4.6 — the right balance for almost any agent</option>
+              <option value="anthropic/claude-opus-4.7">Claude Opus 4.7 — the smartest option, worth it for hard problems</option>
+              <option value="openai/gpt-5">GPT-5 — strongest closed competitor, great at structured tasks</option>
             </optgroup>
-            <optgroup label="High intelligence (use when depth matters)">
-              <option value="anthropic/claude-opus-4.7">Claude Opus 4.7 — best-in-class reasoning</option>
-              <option value="openai/gpt-5">GPT-5 — strongest closed competitor</option>
+            <optgroup label="Faster, cheaper (when speed/cost actually matters)">
+              <option value="anthropic/claude-haiku-4.5">Claude Haiku 4.5 — fast, cheap, decent at tools</option>
+              <option value="google/gemini-2.5-flash">Gemini 2.5 Flash — fastest, very cheap</option>
+              <option value="openai/gpt-5-mini">GPT-5 mini — cheap GPT-5 family</option>
+            </optgroup>
+            <optgroup label="Frontier (massive context, deepest reasoning)">
               <option value="google/gemini-2.5-pro">Gemini 2.5 Pro — long context, strong tools</option>
               <option value="x-ai/grok-4">Grok 4 — strong tool calling, fast</option>
             </optgroup>
