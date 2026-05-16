@@ -6,9 +6,11 @@ import os
 from fastapi import Depends, FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
-from . import auth
+from . import auth, vault
 from .config import ensure_dirs
-from .routers import activity, agents, analytics, approvals, audit, composio, integrations, logs, overview, schedules, settings, skills, tasks, webhooks
+from .routers import activity, agents, analytics, approvals, audit, composio, integrations, logs, overview, schedules, settings, skills, tasks
+from .routers import vault as vault_router
+from .routers import webhooks
 
 app = FastAPI(title="Staff Room OS Bridge", version="0.1.0")
 
@@ -41,6 +43,7 @@ app.include_router(webhooks.router)  # webhooks router enforces its own auth
 app.include_router(audit.router)  # audit router enforces its own auth
 app.include_router(approvals.router)  # approvals router enforces its own auth
 app.include_router(analytics.router)  # analytics router enforces its own auth
+app.include_router(vault_router.router)  # vault router enforces its own auth
 app.include_router(settings.router)  # settings router already enforces auth
 
 
@@ -52,6 +55,11 @@ def _startup() -> None:
     else:
         print(f"🔐 Bridge token: {auth.current_token()}")
         print("   Set STAFFROOM_AUTH_TOKEN in the web env to authenticate.")
+    # Decrypt vault and export to os.environ so spawned HERMÉS processes
+    # inherit secrets without plaintext .env on disk.
+    n = vault.export_to_env()
+    if n:
+        print(f"🔓 vault: exported {n} secret(s) to environment (key={vault.key_source()})")
 
 
 @app.get("/api/health")
