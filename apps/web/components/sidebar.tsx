@@ -11,6 +11,7 @@ import {
   Plug,
   Zap,
   Target,
+  MessageSquare,
   BarChart3,
   Settings,
   Search,
@@ -22,6 +23,7 @@ import { cn } from "@/lib/cn";
 const NAV = [
   { href: "/welcome", label: "Home", icon: Home },
   { href: "/agents", label: "Agents", icon: Bot },
+  { href: "/chat", label: "Chat", icon: MessageSquare },
   { href: "/schedules", label: "Schedules", icon: Workflow },
   { href: "/webhooks", label: "Triggers", icon: Zap },
   { href: "/activity", label: "Activity", icon: Activity },

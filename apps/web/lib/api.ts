@@ -321,6 +321,48 @@ export const webhooks = {
   remove: (name: string) => fetch(`/api/webhooks/${name}`, { method: "DELETE" }),
 };
 
+export interface ChatThread {
+  id: string;
+  agent_id: string;
+  agent_name: string;
+  title: string;
+  session_id: string | null;
+  created_at: string;
+}
+export interface ChatMessage {
+  id: number;
+  role: string;
+  content: string | null;
+  tool_calls: string | null;
+  tool_name: string | null;
+  tool_call_id: string | null;
+  timestamp: number;
+  reasoning: string | null;
+}
+export const chat = {
+  threads: (agentId?: string) =>
+    req<{ items: ChatThread[]; total: number }>(
+      "/api/chat/threads" + (agentId ? `?agent_id=${agentId}` : ""),
+    ),
+  create: (body: { agent_id: string; title?: string }) =>
+    req<ChatThread>("/api/chat/threads", { method: "POST", body: JSON.stringify(body) }),
+  rename: (id: string, title: string) =>
+    req<ChatThread>(`/api/chat/threads/${id}`, {
+      method: "PATCH",
+      body: JSON.stringify({ title }),
+    }),
+  remove: (id: string) => fetch(`/api/chat/threads/${id}`, { method: "DELETE" }),
+  messages: (id: string) =>
+    req<{ thread: ChatThread; messages: ChatMessage[] }>(
+      `/api/chat/threads/${id}/messages`,
+    ),
+  send: (id: string, content: string) =>
+    req<{ thread: ChatThread; messages: ChatMessage[] }>(
+      `/api/chat/threads/${id}/messages`,
+      { method: "POST", body: JSON.stringify({ content }) },
+    ),
+};
+
 export interface Capability {
   id: string;
   ready: boolean;
