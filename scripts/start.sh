@@ -61,6 +61,17 @@ if agent_cfg.get("reasoning_effort") != desired_effort:
     print(f"[start] agent.reasoning_effort = {desired_effort}")
     changed = True
 
+# ── Subagent model pairing: when the main agent delegates a sub-task,
+#    use a cheaper model for that. Cuts cost on delegation-heavy work
+#    without dropping the quality of the main agent's reasoning. Override
+#    with HERMES_SUBAGENT_MODEL in Railway env to pin a different worker.
+subagents_cfg = cfg.setdefault("subagents", {})
+desired_subagent = os.environ.get("HERMES_SUBAGENT_MODEL", "anthropic/claude-haiku-4.5")
+if subagents_cfg.get("model") != desired_subagent:
+    subagents_cfg["model"] = desired_subagent
+    print(f"[start] subagents.model = {desired_subagent}")
+    changed = True
+
 # ── Model provider (only set if not already configured) ───────────────────
 model = cfg.setdefault("model", {})
 if not model.get("provider") or model.get("provider") == "auto" and not model.get("default"):

@@ -106,7 +106,11 @@ export default function HomePage() {
       <div className="grid grid-cols-2 md:grid-cols-4 gap-3 mt-8">
         <Stat label="Agents" value={ov?.total_agents ?? 0} accent={ov?.healthy ? "ok" : undefined} />
         <Stat label="Online now" value={`${ov?.healthy ?? 0} of ${ov?.total_agents ?? 0}`} />
-        <Stat label="Tasks today" value={ov?.tasks_today ?? 0} />
+        <Stat
+          label="Actions today"
+          value={ov?.tasks_today ?? 0}
+          hint="Total tool calls across all agents (each Gmail fetch, Slack post, etc. counts as one action)."
+        />
         <Stat label="Spent today" value={fmtUsd(ov?.cost_today_usd)} />
       </div>
 
@@ -184,9 +188,19 @@ export default function HomePage() {
   );
 }
 
-function Stat({ label, value, accent }: { label: string; value: React.ReactNode; accent?: "ok" }) {
+function Stat({
+  label,
+  value,
+  accent,
+  hint,
+}: {
+  label: string;
+  value: React.ReactNode;
+  accent?: "ok";
+  hint?: string;
+}) {
   return (
-    <div className="card card-hover p-5">
+    <div className="card card-hover p-5" title={hint}>
       <div className="text-[11px] uppercase tracking-[0.14em] text-muted">{label}</div>
       <div
         className={`font-display text-3xl mt-2 tabular tracking-tight ${
