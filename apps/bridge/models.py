@@ -1,7 +1,7 @@
 """Pydantic response schemas for the bridge."""
 from __future__ import annotations
 
-from typing import Literal, Optional
+from typing import List, Literal, Optional
 
 from pydantic import BaseModel, Field
 
@@ -18,7 +18,8 @@ class AgentDef(BaseModel):
     icon: str = "🤖"
     model: str = "claude-sonnet-4-6"
     system_prompt: str = ""
-    toolset: str = "default"
+    toolset: str = "default"  # legacy single-string field, kept for back-compat
+    toolsets: Optional[List[str]] = None  # new multi-select; preferred when set
     enabled: bool = True
 
 
@@ -39,6 +40,7 @@ class AgentCreate(BaseModel):
     model: str = "claude-sonnet-4-6"
     system_prompt: str = ""
     toolset: str = "default"
+    toolsets: Optional[List[str]] = None
 
 
 class AgentPatch(BaseModel):
@@ -50,6 +52,7 @@ class AgentPatch(BaseModel):
     model: Optional[str] = None
     system_prompt: Optional[str] = None
     toolset: Optional[str] = None
+    toolsets: Optional[List[str]] = None
     enabled: Optional[bool] = None
 
 

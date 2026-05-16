@@ -28,8 +28,24 @@ function AddAgentSheet({ onClose, onCreated }: { onClose: () => void; onCreated:
   const [icon, setIcon] = useState("🤖");
   const [model, setModel] = useState("anthropic/claude-sonnet-4.6");
   const [systemPrompt, setSystemPrompt] = useState("");
+  const [toolsets, setToolsets] = useState<string[]>(["composio"]);
   const [busy, setBusy] = useState(false);
   const [err, setErr] = useState<string | null>(null);
+
+  const TOOLSET_OPTIONS = [
+    { id: "composio", label: "Composio (250+ apps via OAuth)" },
+    { id: "memory", label: "Memory tools" },
+    { id: "web", label: "Web search & fetch" },
+    { id: "code_execution", label: "Code execution" },
+    { id: "browser", label: "Browser automation" },
+    { id: "terminal", label: "Terminal" },
+  ];
+
+  function toggleToolset(id: string) {
+    setToolsets((prev) =>
+      prev.includes(id) ? prev.filter((x) => x !== id) : [...prev, id],
+    );
+  }
 
   async function submit(e: React.FormEvent) {
     e.preventDefault();
@@ -43,6 +59,7 @@ function AddAgentSheet({ onClose, onCreated }: { onClose: () => void; onCreated:
         icon,
         model,
         system_prompt: systemPrompt,
+        toolsets: toolsets.length ? toolsets : undefined,
       } as never);
       onCreated();
       onClose();
@@ -131,6 +148,28 @@ function AddAgentSheet({ onClose, onCreated }: { onClose: () => void; onCreated:
               <option value="claude-sonnet-4-6">Claude Sonnet 4.6</option>
             </optgroup>
           </select>
+        </Field>
+
+        <Field label="Toolsets (what the agent can do)">
+          <div className="flex flex-col gap-1 -mt-0.5">
+            {TOOLSET_OPTIONS.map((t) => (
+              <label
+                key={t.id}
+                className="flex items-center gap-2 text-sm cursor-pointer px-2 py-1 rounded hover:bg-black/[0.04] dark:hover:bg-white/[0.04]"
+              >
+                <input
+                  type="checkbox"
+                  checked={toolsets.includes(t.id)}
+                  onChange={() => toggleToolset(t.id)}
+                />
+                <span className="font-mono text-xs text-muted">{t.id}</span>
+                <span className="text-xs">— {t.label}</span>
+              </label>
+            ))}
+            <div className="text-[10px] text-muted mt-1">
+              Empty = HERMÉS default toolset.
+            </div>
+          </div>
         </Field>
 
         {err && <div className="text-sm text-red-600">{err}</div>}

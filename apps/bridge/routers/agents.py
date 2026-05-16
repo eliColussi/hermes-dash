@@ -53,6 +53,7 @@ def create_agent(payload: AgentCreate) -> AgentView:
         "model": payload.model,
         "system_prompt": payload.system_prompt,
         "toolset": payload.toolset,
+        "toolsets": payload.toolsets or None,
         "enabled": True,
     }
     agents.append(new_agent)

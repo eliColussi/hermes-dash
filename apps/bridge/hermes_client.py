@@ -221,6 +221,15 @@ def start_agent(agent: dict[str, Any]) -> int:
     # upstream class signature changes. The exact `hermes` invocation will need
     # tuning per HERMÉS release — this is the well-known fragile seam from the
     # plan's Risks section.
+    # Toolset selection: prefer the new `toolsets` list, fall back to the
+    # legacy single `toolset` field. Empty / [default] → don't pass -t at all
+    # so HERMÉS uses its default toolset.
+    toolsets_list = agent.get("toolsets")
+    if not toolsets_list:
+        legacy = agent.get("toolset", "default")
+        toolsets_list = [legacy] if legacy and legacy != "default" else []
+    toolsets_arg = ",".join(t for t in toolsets_list if t and t != "default")
+
     cmd = [
         HERMES_BIN,
         "chat",
@@ -230,6 +239,8 @@ def start_agent(agent: dict[str, Any]) -> int:
         "--system",
         agent.get("system_prompt") or agent.get("description", ""),
     ]
+    if toolsets_arg:
+        cmd.extend(["-t", toolsets_arg])
     with log_path.open("a") as logf:
         proc = subprocess.Popen(
             cmd,

@@ -11,6 +11,7 @@ export interface Agent {
   model: string;
   system_prompt: string;
   toolset: string;
+  toolsets: string[] | null;
   enabled: boolean;
   status: AgentStatus;
   tasks_today: number;
