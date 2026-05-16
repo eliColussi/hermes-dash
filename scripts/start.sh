@@ -63,7 +63,26 @@ for i in 1 2 3 4 5 6 7 8 9 10; do
   sleep 1
 done
 
-trap 'kill $BRIDGE_PID 2>/dev/null || true' EXIT INT TERM
+trap 'kill $BRIDGE_PID $GATEWAY_PID 2>/dev/null || true' EXIT INT TERM
+
+# Auto-start the HERMÉS gateway in a restart loop. Clients never see this; it
+# just hums in the background so Telegram/Slack/webhook traffic gets handled.
+# Suppressed entirely unless at least one messaging or webhook channel is
+# configured (no point spinning up a gateway with nothing to route).
+HERMES_BIN_PATH="/app/apps/bridge/.venv/bin/hermes"
+if [ -x "$HERMES_BIN_PATH" ] && {
+     [ -n "${TELEGRAM_BOT_TOKEN:-}" ] || [ -n "${SLACK_BOT_TOKEN:-}" ] || \
+     [ -n "${DISCORD_BOT_TOKEN:-}" ] || [ -n "${WEBHOOK_ENABLED:-}" ];
+   }; then
+  (
+    while true; do
+      echo "[start] launching hermes gateway"
+      "$HERMES_BIN_PATH" gateway || echo "[start] hermes gateway exited; restarting in 5s"
+      sleep 5
+    done
+  ) &
+  GATEWAY_PID=$!
+fi
 
 # Web binds to $PORT (Railway/Render contract).
 echo "[start] launching web on 0.0.0.0:${PORT:-3737}"

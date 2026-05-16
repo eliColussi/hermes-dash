@@ -24,16 +24,16 @@ export default function ActivityPage() {
           <h1 className="text-3xl font-semibold tracking-tight">Activity</h1>
           <p className="text-sm text-muted mt-1">
             {view === "sessions"
-              ? "Recent HERMÉS sessions."
-              : "Append-only audit trail. Every tool call, approval, and lifecycle event."}
+              ? "What your agents have been doing."
+              : "Every step an agent took, in order."}
           </p>
         </div>
         <div className="flex p-1 bg-[var(--bg)] border border-line rounded-lg text-sm">
           <ViewToggle current={view} option="sessions" onChange={setView}>
-            Sessions
+            Conversations
           </ViewToggle>
           <ViewToggle current={view} option="audit" onChange={setView}>
-            Audit log
+            History
           </ViewToggle>
         </div>
       </div>

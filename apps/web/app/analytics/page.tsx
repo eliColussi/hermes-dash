@@ -22,9 +22,9 @@ export default function AnalyticsPage() {
     <div className="max-w-6xl mx-auto">
       <div className="flex items-center justify-between mb-6">
         <div>
-          <h1 className="text-3xl font-semibold tracking-tight">Analytics</h1>
+          <h1 className="text-3xl font-semibold tracking-tight">Usage</h1>
           <p className="text-sm text-muted mt-1">
-            Spend, tokens, and tool calls across your agents.
+            What your agents did this week, and what it cost.
           </p>
         </div>
         <div className="flex p-1 bg-[var(--bg)] border border-line rounded-lg text-sm">
@@ -46,7 +46,7 @@ export default function AnalyticsPage() {
 
       {q.data?.state_db === "not_found" && (
         <div className="card p-4 mb-4 text-sm text-muted">
-          No HERMÉS state.db yet. Run an agent to populate analytics.
+          Once your agents start running, their usage shows up here.
         </div>
       )}
 

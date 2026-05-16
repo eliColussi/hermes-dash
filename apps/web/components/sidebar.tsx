@@ -3,48 +3,32 @@
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import {
-  Sparkles,
-  LayoutGrid,
+  Home,
   Bot,
-  ListTodo,
   Activity,
-  ScrollText,
   ShieldCheck,
   Workflow,
   Plug,
-  Webhook as WebhookIcon,
+  Zap,
   Target,
   BarChart3,
-  BookOpen,
-  FlaskConical,
-  Puzzle,
   Settings,
   Search,
 } from "lucide-react";
 import { cn } from "@/lib/cn";
 
-const PRIMARY = [
-  { href: "/welcome", label: "Welcome", icon: Sparkles },
-  { href: "/overview", label: "Overview", icon: LayoutGrid },
+// One flat list — no jargon section labels.
+// URL routes stay stable; only labels change.
+const NAV = [
+  { href: "/welcome", label: "Home", icon: Home },
   { href: "/agents", label: "Agents", icon: Bot },
-  { href: "/tasks", label: "Tasks", icon: ListTodo },
-  { href: "/activity", label: "Activity", icon: Activity },
-  { href: "/log", label: "Log", icon: ScrollText },
-];
-
-const OPERATIONS = [
   { href: "/schedules", label: "Schedules", icon: Workflow },
-  { href: "/webhooks", label: "Webhooks", icon: WebhookIcon },
+  { href: "/webhooks", label: "Triggers", icon: Zap },
+  { href: "/activity", label: "Activity", icon: Activity },
   { href: "/approvals", label: "Approvals", icon: ShieldCheck },
-  { href: "/integrations", label: "Integrations", icon: Plug },
   { href: "/goals", label: "Goals", icon: Target },
-  { href: "/analytics", label: "Analytics", icon: BarChart3 },
-];
-
-const INTELLIGENCE = [
-  { label: "Knowledge", icon: BookOpen, soon: true },
-  { label: "Experiments", icon: FlaskConical, soon: true },
-  { href: "/skills", label: "Skills", icon: Puzzle },
+  { href: "/integrations", label: "Connections", icon: Plug },
+  { href: "/analytics", label: "Usage", icon: BarChart3 },
 ];
 
 export function Sidebar() {
@@ -67,7 +51,7 @@ export function Sidebar() {
 
       <nav className="px-3 pt-2 flex-1 overflow-y-auto">
         <ul className="space-y-1">
-          {PRIMARY.map((item) => {
+          {NAV.map((item) => {
             const active = pathname === item.href;
             const Icon = item.icon;
             return (
@@ -79,44 +63,6 @@ export function Sidebar() {
               </li>
             );
           })}
-        </ul>
-
-        <SectionLabel>Operations</SectionLabel>
-        <ul className="space-y-1">
-          {OPERATIONS.map((item) =>
-            "href" in item && item.href ? (
-              <li key={item.label}>
-                <Link
-                  href={item.href}
-                  className={cn("nav-item", pathname === item.href && "active")}
-                >
-                  <item.icon className="w-4 h-4" />
-                  <span>{item.label}</span>
-                </Link>
-              </li>
-            ) : (
-              <SoonItem key={item.label} icon={item.icon} label={item.label} />
-            ),
-          )}
-        </ul>
-
-        <SectionLabel>Intelligence</SectionLabel>
-        <ul className="space-y-1">
-          {INTELLIGENCE.map((item) =>
-            "href" in item && item.href ? (
-              <li key={item.label}>
-                <Link
-                  href={item.href}
-                  className={cn("nav-item", pathname === item.href && "active")}
-                >
-                  <item.icon className="w-4 h-4" />
-                  <span>{item.label}</span>
-                </Link>
-              </li>
-            ) : (
-              <SoonItem key={item.label} icon={item.icon} label={item.label} />
-            ),
-          )}
         </ul>
       </nav>
 
@@ -134,26 +80,3 @@ export function Sidebar() {
   );
 }
 
-function SectionLabel({ children }: { children: React.ReactNode }) {
-  return (
-    <div className="mt-5 mb-1 px-3 text-[11px] uppercase tracking-wider text-muted">
-      {children}
-    </div>
-  );
-}
-
-function SoonItem({
-  icon: Icon,
-  label,
-}: {
-  icon: React.ComponentType<{ className?: string }>;
-  label: string;
-}) {
-  return (
-    <li className="nav-item opacity-50 cursor-not-allowed" title="Coming soon">
-      <Icon className="w-4 h-4" />
-      <span>{label}</span>
-      <span className="ml-auto text-[10px] uppercase tracking-wider text-muted">soon</span>
-    </li>
-  );
-}

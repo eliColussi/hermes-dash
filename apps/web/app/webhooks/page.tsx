@@ -54,25 +54,25 @@ export default function WebhooksPage() {
     <div className="max-w-6xl mx-auto">
       <div className="flex items-center justify-between mb-4">
         <div>
-          <h1 className="text-3xl font-semibold tracking-tight">Webhooks</h1>
+          <h1 className="text-3xl font-semibold tracking-tight">Triggers</h1>
           <p className="text-sm text-muted mt-1">
-            External services POST here to trigger an agent. Each route gets its own HMAC secret.
+            Outside events that wake up an agent. A new Stripe payment, a fresh
+            GitHub issue, a form submission — each one can kick off the right
+            agent.
           </p>
         </div>
         <button
           onClick={() => setOpen(true)}
           className="px-3 py-2 rounded-lg bg-blue-600 text-white text-sm flex items-center gap-2"
         >
-          <Plus className="w-4 h-4" /> New webhook
+          <Plus className="w-4 h-4" /> New trigger
         </button>
       </div>
 
       {q.data?.base_url ? null : (
-        <div className="card p-4 mb-4 text-xs text-orange-600">
-          <code>PUBLIC_BASE_URL</code> is not set. URLs below will be relative
-          — set it in Railway Variables (e.g.{" "}
-          <code>https://your-app.up.railway.app</code>) so you can hand the
-          full URL to third-party services.
+        <div className="card p-4 mb-4 text-xs text-muted">
+          The trigger URLs below appear without a domain prefix. Your team can
+          fix this — send them a quick message.
         </div>
       )}
 
@@ -80,7 +80,7 @@ export default function WebhooksPage() {
         {q.isLoading && <div className="p-6 text-sm text-muted">Loading…</div>}
         {q.data && q.data.items.length === 0 && (
           <div className="p-6 text-sm text-muted">
-            No webhooks yet. Click <strong>New webhook</strong> to wire up
+            No triggers yet. Click <strong>New trigger</strong> to wire up
             Stripe, GitHub, or a custom form.
           </div>
         )}
@@ -91,7 +91,7 @@ export default function WebhooksPage() {
                 key={w.name}
                 w={w}
                 onDelete={() => {
-                  if (confirm(`Delete webhook "${w.name}"?`)) remove.mutate(w.name);
+                  if (confirm(`Delete trigger "${w.name}"?`)) remove.mutate(w.name);
                 }}
               />
             ))}
@@ -136,7 +136,7 @@ function WebhookRow({ w, onDelete }: { w: Webhook; onDelete: () => void }) {
       </div>
       <div className="grid grid-cols-1 md:grid-cols-2 gap-3 mt-3">
         <CopyableRow label="POST URL" value={w.url} />
-        <CopyableRow label="HMAC secret (masked)" value={w.secret_masked} />
+        <CopyableRow label="Secret (use when configuring the source)" value={w.secret_masked} />
       </div>
       <div className="mt-3 flex items-center gap-3 flex-wrap text-xs text-muted">
         <span>Deliver: <code>{w.deliver}</code>{w.deliver_only ? " (direct, no agent)" : ""}</span>
@@ -236,7 +236,7 @@ function NewWebhookSheet({
         className="w-[560px] h-full bg-[var(--surface)] border-l border-line p-6 flex flex-col gap-4 overflow-y-auto"
       >
         <div className="flex items-center justify-between">
-          <h2 className="text-lg font-semibold">New webhook</h2>
+          <h2 className="text-lg font-semibold">New trigger</h2>
           <button type="button" onClick={onClose} className="p-1 hover:bg-black/5 rounded">
             <X className="w-4 h-4" />
           </button>
@@ -273,7 +273,7 @@ function NewWebhookSheet({
           <input
             value={description}
             onChange={(e) => setDescription(e.target.value)}
-            placeholder="What is this webhook for?"
+            placeholder="What is this trigger for?"
             className="px-3 py-2 rounded-lg border border-line bg-[var(--bg)] text-sm"
           />
         </div>
@@ -345,7 +345,7 @@ function NewWebhookSheet({
             disabled={busy || !name || !prompt}
             className="flex-1 px-4 py-2 bg-blue-600 text-white rounded-lg text-sm disabled:opacity-50"
           >
-            {busy ? "Creating…" : "Create webhook"}
+            {busy ? "Creating…" : "Create trigger"}
           </button>
         </div>
       </form>

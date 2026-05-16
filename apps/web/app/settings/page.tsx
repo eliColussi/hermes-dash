@@ -19,13 +19,13 @@ export default function SettingsPage() {
   return (
     <div className="max-w-3xl mx-auto">
       <h1 className="text-3xl font-semibold tracking-tight">Settings</h1>
-      <p className="text-sm text-muted mt-1 mb-6">Bridge configuration and authentication.</p>
+      <p className="text-sm text-muted mt-1 mb-6">Workspace settings.</p>
 
       <div className="card p-5 mb-4">
-        <div className="text-sm font-medium mb-2">Bridge auth token</div>
+        <div className="text-sm font-medium mb-2">Access key</div>
         {s?.auth_disabled ? (
           <div className="text-sm text-orange-600">
-            ⚠️ Auth is disabled (STAFFROOM_AUTH_DISABLED=1). Do not run this on a public host.
+            Sign-in is disabled in this environment. Your team can turn it back on.
           </div>
         ) : (
           <>
