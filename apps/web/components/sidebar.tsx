@@ -9,10 +9,10 @@ import {
   ListTodo,
   Activity,
   ScrollText,
-  MessageSquare,
   ShieldCheck,
   Workflow,
   Plug,
+  Webhook as WebhookIcon,
   Target,
   BarChart3,
   BookOpen,
@@ -33,9 +33,9 @@ const PRIMARY = [
 ];
 
 const OPERATIONS = [
-  { label: "Messages", icon: MessageSquare, soon: true },
-  { label: "Approvals", icon: ShieldCheck, soon: true },
   { href: "/schedules", label: "Schedules", icon: Workflow },
+  { href: "/webhooks", label: "Webhooks", icon: WebhookIcon },
+  { label: "Approvals", icon: ShieldCheck, soon: true },
   { href: "/integrations", label: "Integrations", icon: Plug },
   { label: "Goals", icon: Target, soon: true },
   { label: "Analytics", icon: BarChart3, soon: true },

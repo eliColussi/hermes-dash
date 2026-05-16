@@ -183,6 +183,39 @@ export const schedules = {
     fetch(`/api/schedules/${id}`, { method: "DELETE" }),
 };
 
+// Webhooks (HERMÉS dynamic subscriptions)
+export interface Webhook {
+  name: string;
+  description: string;
+  url: string;
+  events: string[];
+  secret_masked: string;
+  deliver: string;
+  deliver_only: boolean;
+  prompt: string;
+  skills: string[];
+  created_at: string | null;
+}
+
+export const webhooks = {
+  list: () => req<{ items: Webhook[]; total: number; base_url: string }>("/api/webhooks"),
+  create: (body: {
+    name: string;
+    description?: string;
+    prompt?: string;
+    events?: string[];
+    deliver?: string;
+    deliver_chat_id?: string;
+    deliver_only?: boolean;
+    skills?: string[];
+  }) =>
+    req<{ name: string; url: string; secret: string; note: string }>(
+      "/api/webhooks",
+      { method: "POST", body: JSON.stringify(body) },
+    ),
+  remove: (name: string) => fetch(`/api/webhooks/${name}`, { method: "DELETE" }),
+};
+
 export const composio = {
   status: () => req<ComposioStatus>("/api/composio/status"),
   toolkits: () =>
