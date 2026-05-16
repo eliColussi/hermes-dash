@@ -325,8 +325,19 @@ def _reap_if_finished(thread_id: str, threads: list[dict], thread: dict) -> bool
             except OSError:
                 pass
 
+    elapsed = time.time() - job["started"]
+    print(
+        f"[chat-timing] thread={thread_id} subprocess_total={elapsed:.2f}s "
+        f"exit={rc} log_bytes={len(log_text)}"
+    )
     if rc != 0:
         print(f"[chat] subprocess exit={rc} thread={thread_id}: {log_text[-600:]!r}")
+    else:
+        # Print first + last lines of the log to see where time goes
+        lines = [ln for ln in log_text.splitlines() if ln.strip()]
+        if lines:
+            print(f"[chat-timing] thread={thread_id} log_first={lines[0][:200]!r}")
+            print(f"[chat-timing] thread={thread_id} log_last={lines[-1][:200]!r}")
 
     # First-turn session capture
     if not thread.get("session_id"):
