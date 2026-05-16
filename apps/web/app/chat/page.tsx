@@ -214,16 +214,33 @@ function ChatPane({
   // is working we surface a single ephemeral "Did N actions" counter
   // below the thinking bubble; once the turn finishes the noise is gone
   // and only the conversation remains.
-  const serverMessages = rawServerMessages.filter((m) => {
+  const filtered = rawServerMessages.filter((m) => {
     if (m.role === "system" || m.role === "tool") return false;
     if (m.role === "assistant") {
       const text = (m.content ?? "").trim();
       const isStub = !text || text === "..." || text === "…";
-      // Hide intermediate tool-call turns that have no user-facing text.
       if (isStub) return false;
     }
     return true;
   });
+  // Collapse mid-turn narration: between any two user messages, keep only
+  // the *last* assistant message (the closing report). All the "let me
+  // check…", "now I'll fetch…" interim turns vanish, leaving the operator
+  // with one clean answer per question — the way they think about it.
+  const serverMessages: ChatMessage[] = [];
+  let assistantSeenSinceLastUser = false;
+  for (let i = filtered.length - 1; i >= 0; i--) {
+    const m = filtered[i];
+    if (m.role === "user") {
+      serverMessages.unshift(m);
+      assistantSeenSinceLastUser = false;
+    } else if (m.role === "assistant") {
+      if (!assistantSeenSinceLastUser) {
+        serverMessages.unshift(m);
+        assistantSeenSinceLastUser = true;
+      }
+    }
+  }
 
   // Count tool calls since the last user message — the "this turn"
   // activity that the thinking bubble can summarise.
