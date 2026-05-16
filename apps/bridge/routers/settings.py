@@ -1,11 +1,16 @@
 """Settings endpoints: expose token + paths (auth-gated)."""
 from __future__ import annotations
 
+import io
 import json
 import os
 import secrets
+import tarfile
+import time
+from pathlib import Path
 
 from fastapi import APIRouter, Depends
+from fastapi.responses import StreamingResponse
 
 from .. import auth
 from ..config import HERMES_BIN, HERMES_HOME, STAFFROOM_HOME
@@ -62,6 +67,59 @@ def mcp_config() -> dict:
             "own `hermes` executable (`which hermes`)."
         ),
     }
+
+
+# Items skipped from backup — caches that bloat the tarball with no value.
+_BACKUP_EXCLUDE = {
+    "logs",        # rotated logs, recoverable
+    "sessions",    # JSON trajectory dumps, large; state.db is authoritative
+    "plugins",     # symlinks to /app/plugins (would dereference; restore via image)
+    "checkpoints", # internal
+}
+
+
+def _tar_dir(tf: tarfile.TarFile, src: Path, arc_prefix: str) -> None:
+    if not src.exists():
+        return
+    for path in src.rglob("*"):
+        rel = path.relative_to(src)
+        if rel.parts and rel.parts[0] in _BACKUP_EXCLUDE:
+            continue
+        try:
+            tf.add(path, arcname=f"{arc_prefix}/{rel}", recursive=False)
+        except (OSError, ValueError):
+            continue
+
+
+@router.get("/backup")
+def backup() -> StreamingResponse:
+    """Stream a .tar.gz of HERMES_HOME + STAFFROOM_HOME state.
+
+    Excludes caches/logs/checkpoints/sessions for size. Includes state.db,
+    config.yaml, .env, kanban.db, webhook_subscriptions.json, agents.yaml,
+    audit/, runtime/, skills/.
+    """
+    buf = io.BytesIO()
+    with tarfile.open(fileobj=buf, mode="w:gz") as tf:
+        _tar_dir(tf, HERMES_HOME, "hermes")
+        _tar_dir(tf, STAFFROOM_HOME, "staff-room-os")
+    buf.seek(0)
+    stamp = time.strftime("%Y%m%d-%H%M%S")
+    fname = f"staffroom-backup-{stamp}.tar.gz"
+
+    def _iter():
+        chunk = 64 * 1024
+        while True:
+            data = buf.read(chunk)
+            if not data:
+                break
+            yield data
+
+    return StreamingResponse(
+        _iter(),
+        media_type="application/gzip",
+        headers={"Content-Disposition": f'attachment; filename="{fname}"'},
+    )
 
 
 @router.post("/rotate-token")

@@ -84,7 +84,54 @@ export default function SettingsPage() {
         ))}
       </div>
 
+      <BackupCard />
+
       <ClaudeCodeBridge />
+    </div>
+  );
+}
+
+function BackupCard() {
+  const [busy, setBusy] = useState(false);
+
+  async function download() {
+    setBusy(true);
+    try {
+      const r = await fetch("/api/settings/backup");
+      if (!r.ok) {
+        alert(`Backup failed: ${r.status} ${r.statusText}`);
+        return;
+      }
+      const blob = await r.blob();
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement("a");
+      a.href = url;
+      a.download = r.headers.get("content-disposition")?.match(/filename="([^"]+)"/)?.[1]
+        ?? "staffroom-backup.tar.gz";
+      a.click();
+      URL.revokeObjectURL(url);
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  return (
+    <div className="card p-5 mb-4">
+      <div className="text-sm font-medium mb-1">Backup</div>
+      <p className="text-xs text-muted mb-3">
+        Downloads a .tar.gz of your HERMÉS state + Staff Room config —
+        agents.yaml, state.db, kanban.db, webhook subscriptions, audit log,
+        skills directory, .env. Run this before upgrading HERMÉS or moving
+        to a new Railway service. Excludes rotating logs and trajectory
+        dumps (recoverable).
+      </p>
+      <button
+        disabled={busy}
+        onClick={download}
+        className="px-3 py-2 text-sm border border-line rounded-lg"
+      >
+        {busy ? "Preparing…" : "Download backup"}
+      </button>
     </div>
   );
 }
