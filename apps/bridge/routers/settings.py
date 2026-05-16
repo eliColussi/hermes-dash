@@ -1,13 +1,14 @@
 """Settings endpoints: expose token + paths (auth-gated)."""
 from __future__ import annotations
 
+import json
 import os
 import secrets
 
 from fastapi import APIRouter, Depends
 
 from .. import auth
-from ..config import HERMES_HOME, STAFFROOM_HOME
+from ..config import HERMES_BIN, HERMES_HOME, STAFFROOM_HOME
 
 router = APIRouter(prefix="/api/settings", tags=["settings"], dependencies=[Depends(auth.require_token)])
 
@@ -23,6 +24,43 @@ def get_settings() -> dict:
             "STAFFROOM_AUTH_TOKEN": "set" if os.environ.get("STAFFROOM_AUTH_TOKEN") else "unset",
             "STAFFROOM_AUTH_DISABLED": os.environ.get("STAFFROOM_AUTH_DISABLED", "0"),
         },
+    }
+
+
+@router.get("/mcp-config")
+def mcp_config() -> dict:
+    """Return the Claude Code / Cursor MCP config snippet for connecting to
+    this Staff Room install's HERMÉS messaging bridge.
+
+    HERMÉS already ships a stdio MCP server (vendor/hermes-agent/mcp_serve.py)
+    that exposes conversations, messages, send-message, and approval tools.
+    Pasting this snippet into ~/.claude/claude_desktop_config.json (or the
+    equivalent IDE config) lets the user share memory between their daily
+    Claude Code work and their autonomous HERMÉS agents.
+
+    On Railway / Docker deploys the hermes binary lives at /app/apps/bridge/.venv/bin/hermes;
+    locally we resolve via HERMES_BIN. The operator copies this snippet into
+    their own Claude Code config on their workstation.
+    """
+    return {
+        "claude_code": {
+            "mcpServers": {
+                "hermes": {
+                    "command": HERMES_BIN,
+                    "args": ["mcp", "serve"],
+                    "env": {"HERMES_HOME": str(HERMES_HOME)},
+                }
+            }
+        },
+        "instructions": (
+            "Save to ~/.claude/claude_desktop_config.json (macOS) or "
+            "%APPDATA%\\Claude\\claude_desktop_config.json (Windows). "
+            "If you already have an `mcpServers` block, merge the `hermes` "
+            "entry into it. Restart Claude Code after editing. The bridge "
+            "binary path assumes your HERMÉS install — if it differs from "
+            "the value above, edit the `command` field to point at your "
+            "own `hermes` executable (`which hermes`)."
+        ),
     }
 
 

@@ -77,11 +77,49 @@ export default function SettingsPage() {
         <Row label="Staff Room home" value={s?.staffroom_home ?? "—"} />
       </div>
 
-      <div className="card p-5">
+      <div className="card p-5 mb-4">
         <div className="text-sm font-medium mb-3">Environment</div>
         {Object.entries(s?.env ?? {}).map(([k, v]) => (
           <Row key={k} label={k} value={v} />
         ))}
+      </div>
+
+      <ClaudeCodeBridge />
+    </div>
+  );
+}
+
+function ClaudeCodeBridge() {
+  const q = useQuery({ queryKey: ["mcp-config"], queryFn: api.mcpConfig });
+  const [copied, setCopied] = useState(false);
+  const snippet = q.data?.claude_code ? JSON.stringify(q.data.claude_code, null, 2) : "";
+  return (
+    <div className="card p-5">
+      <div className="text-sm font-medium mb-1">Connect to Claude Code</div>
+      <p className="text-xs text-muted mb-3">
+        Bridge your HERMÉS memory into your daily Claude Code workflow. Paste
+        this into your Claude Code config; restart Claude Code; ask it
+        anything about what your agents are doing — it'll have full access to
+        the same conversations and tools.
+      </p>
+      <pre className="text-[11px] font-mono p-3 rounded-lg border border-line bg-[var(--bg)] overflow-x-auto whitespace-pre">
+        {snippet || "Loading…"}
+      </pre>
+      <div className="flex items-center gap-2 mt-2">
+        <button
+          disabled={!snippet}
+          onClick={() => {
+            navigator.clipboard.writeText(snippet);
+            setCopied(true);
+            setTimeout(() => setCopied(false), 1500);
+          }}
+          className="px-3 py-1.5 text-xs border border-line rounded-lg"
+        >
+          {copied ? "Copied" : "Copy snippet"}
+        </button>
+        <span className="text-[10px] text-muted">
+          {q.data?.instructions}
+        </span>
       </div>
     </div>
   );

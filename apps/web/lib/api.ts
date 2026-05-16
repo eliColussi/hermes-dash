@@ -106,6 +106,10 @@ export const api = {
   stopGateway: () =>
     req<{ running: boolean }>("/api/integrations/gateway/stop", { method: "POST" }),
   settings: () => req<SettingsView>("/api/settings"),
+  mcpConfig: () =>
+    req<{ claude_code: unknown; instructions: string }>(
+      "/api/settings/mcp-config",
+    ),
   rotateToken: () =>
     req<{ rotated: boolean; token?: string; note?: string }>(
       "/api/settings/rotate-token",
