@@ -204,6 +204,22 @@ export interface AuditEntry {
   [key: string]: unknown;
 }
 
+export interface PendingApproval {
+  ts: string;
+  event: string;
+  command_preview?: string;
+  description?: string;
+  pattern_key?: string;
+  session_key?: string;
+  surface?: string;
+  [key: string]: unknown;
+}
+
+export const approvals = {
+  list: () => req<{ items: PendingApproval[]; count: number }>("/api/approvals"),
+  history: () => req<{ items: PendingApproval[]; count: number }>("/api/approvals/history"),
+};
+
 export const audit = {
   list: (params: { date?: string; limit?: number; event?: string } = {}) => {
     const qs = new URLSearchParams();
