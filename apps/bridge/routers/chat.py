@@ -21,6 +21,7 @@ import json
 import os
 import sqlite3
 import subprocess
+import tempfile
 import time
 import uuid
 from contextlib import contextmanager
@@ -309,17 +310,23 @@ def _reap_if_finished(thread_id: str, threads: list[dict], thread: dict) -> bool
             return True
         return False
 
-    # Finished — drain output and clean up.
-    stdout = ""
-    stderr = ""
-    try:
-        stdout, stderr = proc.communicate(timeout=1)
-    except Exception:
-        pass
+    # Finished — read the log file (no pipes, so no buffer deadlock).
+    log_text = ""
+    log_path = job.get("log_path")
+    if log_path and os.path.exists(log_path):
+        try:
+            with open(log_path, "r", encoding="utf-8", errors="replace") as f:
+                log_text = f.read()
+        except OSError:
+            pass
+        finally:
+            try:
+                os.unlink(log_path)
+            except OSError:
+                pass
 
     if rc != 0:
-        tail = (stderr or stdout or "")[-600:]
-        print(f"[chat] subprocess exit={rc} thread={thread_id}: {tail!r}")
+        print(f"[chat] subprocess exit={rc} thread={thread_id}: {log_text[-600:]!r}")
 
     # First-turn session capture
     if not thread.get("session_id"):
@@ -427,22 +434,35 @@ def send_message(thread_id: str, payload: MessageSend) -> dict:
 
     env = {**os.environ, "STAFFROOM_AGENT_ID": agent["id"]}
 
+    # Route stdout+stderr to a temp file rather than subprocess.PIPE. With
+    # PIPE, the OS pipe buffer (64KB on Linux) fills, hermes blocks on
+    # write, and we deadlock until our 5-min hard kill — a classic foot-gun
+    # of long-running unattended subprocesses. With a file, hermes never
+    # blocks; we read the file when the process exits.
+    log_fd, log_path = tempfile.mkstemp(prefix=f"chat-{thread_id}-", suffix=".log")
     try:
         proc = subprocess.Popen(
             cmd,
             env=env,
             stdin=subprocess.DEVNULL,
-            stdout=subprocess.PIPE,
-            stderr=subprocess.PIPE,
-            text=True,
+            stdout=log_fd,
+            stderr=subprocess.STDOUT,
         )
     except Exception as exc:
+        os.close(log_fd)
+        try:
+            os.unlink(log_path)
+        except OSError:
+            pass
         raise HTTPException(500, f"Failed to spawn agent: {exc}")
+    # Popen dup'd the FD into the child; our handle isn't needed anymore.
+    os.close(log_fd)
 
     _RUNNING[thread_id] = {
         "proc": proc,
         "started": invocation_start,
         "title_hint": payload.content.strip(),
+        "log_path": log_path,
     }
 
     # Return the current state immediately (no blocking). The client will
