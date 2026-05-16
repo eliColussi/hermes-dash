@@ -20,7 +20,7 @@ from typing import List, Optional
 from fastapi import APIRouter, Depends, HTTPException, Request
 from pydantic import BaseModel, Field
 
-from .. import auth
+from .. import auth, hermes_client as hc
 from ..config import HERMES_HOME
 
 router = APIRouter(
@@ -78,14 +78,20 @@ def _public_base_url(request: Request) -> str:
 # ---------------------------------------------------------------------------
 
 class WebhookCreate(BaseModel):
-    name: str = Field(..., description="Slug like 'stripe-payment'. Becomes part of the URL.")
+    # `name` accepts free text from the new wizard ("Stripe payments") and we
+    # slugify server-side; old callers passing a slug already still work.
+    name: str = Field(..., description="Human title; slugified to the URL path.")
     description: Optional[str] = None
     prompt: str = Field(
         "",
         description=(
-            "Prompt template. The webhook payload is available as `{payload}` and "
-            "individual fields as `{payload.amount}` etc."
+            "Plain-English instructions for the agent. The event payload is "
+            "auto-appended invisibly — operators don't need to think about it."
         ),
+    )
+    agent_id: Optional[str] = Field(
+        None,
+        description="If set, the trigger runs as this specific Staff Room agent.",
     )
     events: List[str] = Field(default_factory=list, description="Optional header-based event filter.")
     deliver: str = Field(
@@ -112,27 +118,60 @@ def list_webhooks(request: Request) -> dict:
     for name, route in subs.items():
         items.append({
             "name": name,
+            "title": route.get("title") or route.get("description") or name,
             "description": route.get("description", ""),
+            "agent_id": route.get("agent_id"),
             "url": f"{base}/wh/{name}" if base else f"/wh/{name}",
             "events": route.get("events", []),
             "secret_masked": _mask(route.get("secret", "")),
             "deliver": route.get("deliver", "log"),
             "deliver_only": bool(route.get("deliver_only", False)),
-            "prompt": route.get("prompt", ""),
+            "prompt": route.get("user_prompt") or route.get("prompt", ""),
             "skills": route.get("skills", []),
             "created_at": route.get("created_at"),
         })
     return {"items": items, "total": len(items), "base_url": base}
 
 
+def _slugify(text: str) -> str:
+    s = re.sub(r"[^a-z0-9]+", "-", text.lower()).strip("-")
+    return s[:48] or f"trigger-{secrets.token_hex(3)}"
+
+
+def _compose_prompt(user_prompt: str, agent: Optional[dict]) -> str:
+    """Wrap the operator's plain-English prompt so the agent always (a) knows
+    who it's acting as and (b) receives the full event payload — without the
+    operator ever needing to type {payload.x.y.z}."""
+    parts: list[str] = []
+    if agent:
+        identity = (
+            f"You are acting as the \"{agent.get('name')}\" agent. "
+            f"{agent.get('system_prompt') or agent.get('role') or ''}"
+        ).strip()
+        if identity:
+            parts.append(identity)
+    if user_prompt.strip():
+        parts.append(user_prompt.strip())
+    # If the operator didn't use any payload placeholders, append the raw
+    # event dump invisibly so the agent has full context.
+    if "{payload" not in user_prompt and "{__raw__}" not in user_prompt:
+        parts.append("--- Event data ---\n{__raw__}")
+    return "\n\n".join(parts)
+
+
 @router.post("", status_code=201)
 def create_webhook(payload: WebhookCreate, request: Request) -> dict:
-    name = payload.name.strip().lower().replace(" ", "-")
-    if not re.match(r"^[a-z0-9][a-z0-9_-]*$", name):
-        raise HTTPException(
-            400,
-            "Invalid name. Use lowercase alphanumeric with hyphens/underscores.",
-        )
+    raw_title = payload.name.strip()
+    if not raw_title:
+        raise HTTPException(400, "Trigger needs a name.")
+    name = _slugify(raw_title)
+    subs = _load_subs()
+    # Ensure slug uniqueness — append a suffix on collision rather than rejecting.
+    base_name = name
+    suffix = 2
+    while name in subs:
+        name = f"{base_name}-{suffix}"
+        suffix += 1
 
     if payload.deliver_only and payload.deliver == "log":
         raise HTTPException(
@@ -140,12 +179,23 @@ def create_webhook(payload: WebhookCreate, request: Request) -> dict:
             "deliver_only requires a real delivery target (telegram, slack, discord, …).",
         )
 
-    subs = _load_subs()
+    agent: Optional[dict] = None
+    if payload.agent_id:
+        agents = hc.load_agents()
+        agent = next((a for a in agents if a.get("id") == payload.agent_id), None)
+        if not agent:
+            raise HTTPException(404, f"Agent '{payload.agent_id}' not found")
+
+    composed_prompt = _compose_prompt(payload.prompt, agent)
+
     route = {
-        "description": payload.description or f"Created via Staff Room OS: {name}",
+        "title": raw_title,
+        "description": payload.description or raw_title,
+        "agent_id": payload.agent_id,
         "events": payload.events,
         "secret": secrets.token_urlsafe(32),
-        "prompt": payload.prompt,
+        "prompt": composed_prompt,
+        "user_prompt": payload.prompt,  # preserve original for UI re-display
         "skills": payload.skills,
         "deliver": payload.deliver,
         "created_at": time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime()),

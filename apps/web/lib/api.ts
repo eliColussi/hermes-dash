@@ -209,7 +209,9 @@ export const schedules = {
 // Webhooks (HERMÉS dynamic subscriptions)
 export interface Webhook {
   name: string;
+  title: string;
   description: string;
+  agent_id: string | null;
   url: string;
   events: string[];
   secret_masked: string;
@@ -305,6 +307,7 @@ export const webhooks = {
     name: string;
     description?: string;
     prompt?: string;
+    agent_id?: string;
     events?: string[];
     deliver?: string;
     deliver_chat_id?: string;
