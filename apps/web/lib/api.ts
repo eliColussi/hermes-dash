@@ -321,6 +321,15 @@ export const webhooks = {
   remove: (name: string) => fetch(`/api/webhooks/${name}`, { method: "DELETE" }),
 };
 
+export interface Capability {
+  id: string;
+  ready: boolean;
+  detail: string;
+}
+export const capabilities = {
+  list: () => req<{ items: Capability[] }>("/api/capabilities"),
+};
+
 export const composio = {
   status: () => req<ComposioStatus>("/api/composio/status"),
   toolkits: () =>

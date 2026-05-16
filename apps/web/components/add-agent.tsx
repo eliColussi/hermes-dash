@@ -1,8 +1,9 @@
 "use client";
 
-import { Plus, X } from "lucide-react";
+import { useQuery } from "@tanstack/react-query";
+import { AlertTriangle, Check, Plus, X } from "lucide-react";
 import { useState } from "react";
-import { api } from "@/lib/api";
+import { api, capabilities } from "@/lib/api";
 
 export function AddAgentTile({ onCreated }: { onCreated: () => void }) {
   const [open, setOpen] = useState(false);
@@ -31,6 +32,8 @@ function AddAgentSheet({ onClose, onCreated }: { onClose: () => void; onCreated:
   const [toolsets, setToolsets] = useState<string[]>(["composio"]);
   const [busy, setBusy] = useState(false);
   const [err, setErr] = useState<string | null>(null);
+  const capsQ = useQuery({ queryKey: ["capabilities"], queryFn: capabilities.list });
+  const capMap = new Map((capsQ.data?.items ?? []).map((c) => [c.id, c]));
 
   const TOOLSET_OPTIONS = [
     { id: "composio", label: "Composio (250+ apps via OAuth)" },
@@ -150,24 +153,45 @@ function AddAgentSheet({ onClose, onCreated }: { onClose: () => void; onCreated:
           </select>
         </Field>
 
-        <Field label="Toolsets (what the agent can do)">
+        <Field label="What this agent can do">
           <div className="flex flex-col gap-1 -mt-0.5">
-            {TOOLSET_OPTIONS.map((t) => (
-              <label
-                key={t.id}
-                className="flex items-center gap-2 text-sm cursor-pointer px-2 py-1 rounded hover:bg-black/[0.04] dark:hover:bg-white/[0.04]"
-              >
-                <input
-                  type="checkbox"
-                  checked={toolsets.includes(t.id)}
-                  onChange={() => toggleToolset(t.id)}
-                />
-                <span className="font-mono text-xs text-muted">{t.id}</span>
-                <span className="text-xs">— {t.label}</span>
-              </label>
-            ))}
+            {TOOLSET_OPTIONS.map((t) => {
+              const cap = capMap.get(t.id);
+              const ready = cap?.ready ?? true;
+              return (
+                <label
+                  key={t.id}
+                  className="flex items-start gap-2 text-sm cursor-pointer px-2 py-1.5 rounded hover:bg-black/[0.04] dark:hover:bg-white/[0.04]"
+                >
+                  <input
+                    type="checkbox"
+                    checked={toolsets.includes(t.id)}
+                    onChange={() => toggleToolset(t.id)}
+                    className="mt-0.5"
+                  />
+                  <div className="flex-1 min-w-0">
+                    <div className="flex items-center gap-1.5">
+                      <span className="text-xs">{t.label}</span>
+                      {cap && (
+                        ready ? (
+                          <Check className="w-3 h-3 text-ok shrink-0" />
+                        ) : (
+                          <AlertTriangle className="w-3 h-3 text-warn shrink-0" />
+                        )
+                      )}
+                    </div>
+                    {cap && (
+                      <div className={`text-[10px] mt-0.5 ${ready ? "text-muted" : "text-warn"}`}>
+                        {cap.detail}
+                      </div>
+                    )}
+                  </div>
+                </label>
+              );
+            })}
             <div className="text-[10px] text-muted mt-1">
-              Empty = HERMÉS default toolset.
+              Empty selection = the default set. A warning means we&apos;ll need to
+              enable that for you — send your team a message.
             </div>
           </div>
         </Field>
