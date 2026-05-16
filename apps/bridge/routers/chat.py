@@ -96,20 +96,41 @@ def _thread_messages(session_id: Optional[str]) -> list[dict]:
 
 
 def _latest_session_for_source(source_tag: str, since: float) -> Optional[str]:
-    """Find the session HERMÉS just created for a given source tag."""
+    """Find the session HERMÉS just created. We *prefer* matching by our
+    custom source tag, but fall back to the most-recent session started in
+    this invocation window — HERMÉS sometimes normalises or strips custom
+    source values, and a near-empty bridge has effectively no other writers
+    creating sessions in a 30s window."""
     with _state_ro() as conn:
         if conn is None:
             return None
+        # Preferred path: exact source match
         row = conn.execute(
             """
-            SELECT id FROM sessions
+            SELECT id, source, started_at FROM sessions
             WHERE source = ? AND started_at >= ?
-            ORDER BY started_at DESC
-            LIMIT 1
+            ORDER BY started_at DESC LIMIT 1
             """,
-            (source_tag, since - 1.0),  # 1s grace for clock skew
+            (source_tag, since - 1.0),
         ).fetchone()
-        return row["id"] if row else None
+        if row:
+            return row["id"]
+        # Fallback: any session that came into existence during this invocation
+        row = conn.execute(
+            """
+            SELECT id, source, started_at FROM sessions
+            WHERE started_at >= ?
+            ORDER BY started_at DESC LIMIT 1
+            """,
+            (since - 1.0,),
+        ).fetchone()
+        if row:
+            print(
+                f"[chat] session_id fallback: expected source={source_tag!r}, "
+                f"found source={row['source']!r} id={row['id']!r}"
+            )
+            return row["id"]
+        return None
 
 
 # ---------------------------------------------------------------------------
@@ -253,7 +274,6 @@ def send_message(thread_id: str, payload: MessageSend) -> dict:
         raise HTTPException(504, "Agent timed out after 5 minutes. Try a shorter message or check the logs.")
 
     if result.returncode != 0:
-        # Surface a clipped tail of stderr so the operator can see what broke.
         tail = (result.stderr or result.stdout or "")[-800:]
         raise HTTPException(502, f"Agent run failed (exit {result.returncode}): {tail}")
 
@@ -262,10 +282,61 @@ def send_message(thread_id: str, payload: MessageSend) -> dict:
         sid = _latest_session_for_source(source_tag, invocation_start)
         if sid:
             thread["session_id"] = sid
-            # Set a friendly title from the first user message if still default
             if thread.get("title") == "New conversation":
                 thread["title"] = payload.content.strip()[:60]
             _save_threads(threads)
+        else:
+            print(
+                f"[chat] no session created for thread={thread_id} source={source_tag}. "
+                f"stdout tail: {(result.stdout or '')[-400:]!r} | "
+                f"stderr tail: {(result.stderr or '')[-400:]!r}"
+            )
 
     messages = _thread_messages(thread.get("session_id"))
+    # If the DB returned nothing (e.g. session not found, or hermes wrote to
+    # an unexpected place), at minimum surface what hermes printed on stdout
+    # so the conversation isn't a silent void. We synthesize a couple of
+    # message-shaped records the UI can render.
+    if not messages:
+        synth: list[dict] = [
+            {
+                "id": -1,
+                "role": "user",
+                "content": payload.content,
+                "tool_calls": None,
+                "tool_name": None,
+                "tool_call_id": None,
+                "timestamp": invocation_start,
+                "reasoning": None,
+            }
+        ]
+        if (result.stdout or "").strip():
+            synth.append({
+                "id": -2,
+                "role": "assistant",
+                "content": result.stdout.strip(),
+                "tool_calls": None,
+                "tool_name": None,
+                "tool_call_id": None,
+                "timestamp": time.time(),
+                "reasoning": None,
+            })
+        else:
+            synth.append({
+                "id": -2,
+                "role": "assistant",
+                "content": (
+                    "(The agent finished but didn't return any text. "
+                    "This usually means hermes is still installing its model "
+                    "client on first use — try again in a few seconds. "
+                    "Stderr tail in the bridge logs has details.)"
+                ),
+                "tool_calls": None,
+                "tool_name": None,
+                "tool_call_id": None,
+                "timestamp": time.time(),
+                "reasoning": None,
+            })
+        messages = synth
+
     return {"thread": thread, "messages": messages}

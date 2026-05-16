@@ -173,27 +173,52 @@ function ChatPane({
   });
 
   const [input, setInput] = useState("");
+  // Track the in-flight user message so it renders immediately on send and
+  // before the server-side state.db read returns. iMessage-style — the bubble
+  // pops into the right-hand column the moment the operator hits Enter.
+  const [pendingUser, setPendingUser] = useState<string | null>(null);
   const scrollRef = useRef<HTMLDivElement>(null);
 
-  // Scroll to bottom on new messages
   useEffect(() => {
     scrollRef.current?.scrollTo({ top: scrollRef.current.scrollHeight, behavior: "smooth" });
-  }, [q.data?.messages?.length, sendMut.isPending]);
+  }, [q.data?.messages?.length, sendMut.isPending, pendingUser]);
 
   function submit(e: React.FormEvent) {
     e.preventDefault();
     const trimmed = input.trim();
     if (!trimmed || sendMut.isPending) return;
     setInput("");
-    sendMut.mutate(trimmed);
+    setPendingUser(trimmed);
+    sendMut.mutate(trimmed, {
+      onSettled: () => setPendingUser(null),
+    });
   }
 
   const thread = q.data?.thread;
-  const messages = (q.data?.messages ?? []).filter(
-    // Hide system messages from the chat surface — they're the agent's setup,
-    // not part of the conversation the user wants to read.
+  const serverMessages = (q.data?.messages ?? []).filter(
     (m) => m.role !== "system",
   );
+  // If the server's last user message is the one we just sent, drop the
+  // optimistic pending bubble. Otherwise show it on top of the server set
+  // so the user always sees their text the instant they submit.
+  const lastUser = [...serverMessages].reverse().find((m) => m.role === "user");
+  const showPending =
+    pendingUser !== null && (lastUser?.content ?? "").trim() !== pendingUser.trim();
+  const messages = showPending
+    ? [
+        ...serverMessages,
+        {
+          id: -999,
+          role: "user",
+          content: pendingUser,
+          tool_calls: null,
+          tool_name: null,
+          tool_call_id: null,
+          timestamp: Date.now() / 1000,
+          reasoning: null,
+        } satisfies ChatMessage,
+      ]
+    : serverMessages;
 
   return (
     <>
