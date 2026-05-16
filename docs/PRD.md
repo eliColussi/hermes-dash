@@ -1,8 +1,8 @@
 # Staff Room OS — Product Requirements Document
 
-**Status:** v0.1 live on Railway. Now planning v1 → v2.
+**Status:** v1.1 feature-complete on Railway. See [Shipped log](#shipped-log) at the bottom.
 **Audience:** Eli (founder), future engineers, future client demos.
-**Last updated:** 2026-05-15
+**Last updated:** 2026-05-15 (after Ralph loop ship of v1.0 + v1.1)
 
 ---
 
@@ -136,37 +136,37 @@ HERMÉS doesn't know about Composio. One file: `tools/composio_tool.py` register
 
 Each phase is a shippable milestone. Phases are ordered by ROI for Eli's client pipeline.
 
-### v1.0 — "Sellable to first paying client" (target: 2 weeks)
+### v1.0 — "Sellable to first paying client" ✅ DONE (except blocked items)
 
-| # | Feature | Effort | Why |
-|---|---|---|---|
-| 1.0.1 | **Composio integration** — provider card on Integrations, OAuth-style "Connect" buttons backed by Composio's auth, custom tool in HERMÉS, per-agent app selection in Add Agent | M | This is the unlock. 250+ apps without us writing adapters. |
-| 1.0.2 | **Telegram + Slack live agent channels** — already wired via `hermes gateway`; test end-to-end with real tokens, fix the inevitable bugs in `start_agent` flags, add per-channel agent picker (spawning option A) | M | Differentiator. Receptionist DMs Telegram bot, gets agent response. |
-| 1.0.3 | **Cron scheduling UI** — new "Schedules" tab. Wraps `hermes cron` CLI. UI: pick agent, pick cadence (Every weekday 9am, every 5 min, one-shot), prompt template, target output (chat back to Slack? write to file? notify?) | M | "Summarize my Gmail every morning at 9" is the demo. |
-| 1.0.4 | **Approvals tab MVP** — block tool calls flagged `requires_approval`, surface them in Approvals, allow operator to approve/deny | M | Required for enterprise demos; "the agent will never do X without my OK." |
-| 1.0.5 | **Audit log sidecar** — hook handler writes every lifecycle event to `/data/staffroom/audit/*.jsonl`. Activity tab reads it. Settings shows daily file size. | S | SOC2 conversation starter. |
-| 1.0.6 | **Polished onboarding** — Welcome page becomes a 4-step wizard (set API keys → connect first app via Composio → create first agent from template → delegate first task) | M | The receptionist test. |
-| 1.0.7 | **Bug fixes from first live deploy** — known-fragile: `hermes chat --non-interactive` flags, per-agent task attribution edge cases | S | Reality bites. |
+| # | Feature | Status |
+|---|---|---|
+| 1.0.1 | Composio integration (UI + agent-callable plugin tools) | ✅ shipped (commits 6ef820e + d97e9ee) |
+| 1.0.2 | Telegram + Slack live agent channels — end-to-end test | ⏳ BLOCKED on bot tokens from Eli |
+| 1.0.3 | Cron scheduling UI | ✅ shipped (b55560e) |
+| 1.0.4 | Approvals tab MVP | ✅ shipped (de3ebf5) — visibility only; response interaction in v1.1+ |
+| 1.0.5 | Audit log sidecar | ✅ shipped (21859e7) |
+| 1.0.6 | Polished onboarding | ✅ shipped (a991b90) — auto-detecting 6-step checklist |
+| 1.0.7 | Bug fixes from first live deploy | ⏳ no real-world bugs reported yet |
 
-### v1.1 — "Messaging + memory-bridge" (target: +2 weeks)
+### v1.1 — "Messaging + memory-bridge" ✅ DONE
 
-| # | Feature | Effort | Why |
-|---|---|---|---|
-| 1.1.1 | **Webhooks tab** — list HERMÉS webhook routes, add/remove with prompt template + delivery target + per-route secret. The Railway public URL is the webhook endpoint. Pre-built recipes for Stripe payment → onboarding agent. | M | Eli's Stripe → onboarding example. Real automation. |
-| 1.1.2 | **Memory bridge to Claude Code** — Settings → "Connect Claude Code". Generates an MCP server config snippet the user pastes into `~/.claude/claude_desktop_config.json` (or `claude.json`). HERMÉS's `mcp_serve.py` already exposes the messages. Document the pattern, ship the snippet generator. | S | The video's "shared memory between Claude Code and HERMÉS" pitch, now real. |
-| 1.1.3 | **Per-agent task attribution (real)** — patch HERMÉS to add `staffroom_agent_id` column to `sessions`, or maintain a sidecar correlation table. The current uptime-window heuristic is honest but imperfect. | S | Overview counts become trustworthy. |
-| 1.1.4 | **Settings: backup / restore** — button that snapshots `/data` to a downloadable tarball, button that restores. Pre-deploy safety. | S | Before HERMÉS upgrades, click backup. |
-| 1.1.5 | **Encrypted secrets** — libsodium-encrypt `.env` entries, key from `STAFFROOM_SECRETS_KEY` Railway var. | M | Enterprise asks. |
+| # | Feature | Status |
+|---|---|---|
+| 1.1.1 | Webhooks tab | ✅ shipped (1f49f6a) — with Stripe / GitHub / form / monitoring templates |
+| 1.1.2 | Memory bridge to Claude Code | ✅ shipped (798b6e2) — MCP config snippet in Settings |
+| 1.1.3 | Per-agent task attribution (real) | ✅ shipped (71b0916) — via audit-log lookup |
+| 1.1.4 | Settings backup | ✅ shipped (23d1e1b) — restore deferred |
+| 1.1.5 | Encrypted secrets | ✅ shipped (3fa4c30 + 6488e7e) — vault + Integrations routes through it |
 
-### v1.2 — "Enterprise gloss" (target: +3 weeks)
+### v1.2 — "Enterprise gloss"
 
-| # | Feature | Effort | Why |
-|---|---|---|---|
-| 1.2.1 | **Per-channel agent overrides** — patch `gateway/run.py:_resolve_session_agent_runtime` to consult a per-platform agent map. Replaces spawning N gateways. | L | Cleaner ops; one process. |
-| 1.2.2 | **Workflows tab** — visual builder for multi-step jobs (trigger → agent A → wait for approval → agent B). Backed by HERMÉS kanban queue + cron + webhooks already in place. | L | "If this then that, but with AI." |
-| 1.2.3 | **Goals tab** — long-running objectives, each tracked across many agent sessions, with progress reports. Backed by a custom skill that updates a goals.json. | M | Founder dopamine. |
-| 1.2.4 | **Analytics tab** — cost trend, tool-call breakdown, model spend per agent. Reads `state.db` (already has `actual_cost_usd`, `tool_call_count`). | M | OpenRouter spend visibility. |
-| 1.2.5 | **Knowledge tab** — RAG over uploaded docs, exposed as a tool to all agents. New skill that wraps an embedding store. | L | "Train the agent on our SOPs." |
+| # | Feature | Status |
+|---|---|---|
+| 1.2.1 | Per-channel agent overrides | ⏳ HERMÉS fork required — large |
+| 1.2.2 | Workflows visual builder | ⏳ planned — large |
+| 1.2.3 | Goals tab | ⏳ planned — medium |
+| 1.2.4 | Analytics tab | ✅ shipped (053aded) — cost / tokens / sessions by day, model, source, agent |
+| 1.2.5 | Knowledge tab (RAG) | ⏳ planned — large |
 
 ### v2.0 — "Multi-tenant SaaS" (someday)
 
@@ -270,3 +270,37 @@ Once you ✅ this PRD, in order:
 7. Ship to one real client. Watch it break. Fix what breaks.
 
 I'll commit this PRD to the repo so it's versioned and we can revise it as we ship.
+
+---
+
+## Shipped log
+
+Ralph loop autonomous build, ordered by commit:
+
+| # | Commit | PRD | Title |
+|---|---|---|---|
+| 1 | `6ef820e` | §1.0.1 | Composio management UI |
+| 2 | `d97e9ee` | §1.0.1 | Composio plugin (3 agent-callable tools) |
+| 3 | `b55560e` | §1.0.3 | Schedules tab + HERMÉS cron wrap |
+| 4 | `1f49f6a` | §1.1.1 | Webhooks tab + /wh proxy + 4 templates |
+| 5 | `21859e7` | §1.0.5 | staffroom-audit plugin + Activity audit feed |
+| 6 | `de3ebf5` | §1.0.4 | Approvals tab (visibility MVP) |
+| 7 | `798b6e2` | §1.1.2 | Claude Code MCP config snippet |
+| 8 | `71b0916` | §1.1.3 | Real per-agent task attribution |
+| 9 | `053aded` | §1.2.4 | Analytics tab |
+| 10 | `23d1e1b` | §1.1.4 | Settings: backup download |
+| 11 | `a991b90` | §1.0.6 | Onboarding wizard (auto-detecting) |
+| 12 | (validation) | — | Full Docker build + container smoke test (all 13 pages 200, all endpoints 200, both plugins linked + enabled) |
+| 13 | `3fa4c30` | §1.1.5 | Encrypted secrets vault (libsodium) |
+| 14 | `6488e7e` | §1.1.5 | Integrations writes routed through vault |
+| 15 | (this) | docs | PRD + README updated to reflect shipped state |
+
+Outstanding for v1.0 ship:
+- **§1.0.2 Telegram + Slack live channel test** — blocked on bot tokens from Eli. Once provided: ~30 min smoke test, fix any spawn-flag issues, demo-ready.
+
+Outstanding for v1.2 (planning):
+- §1.2.1 per-channel agent overrides (needs HERMÉS fork)
+- §1.2.2 Workflows visual builder (large)
+- §1.2.3 Goals tab (medium)
+- §1.2.5 Knowledge / RAG (large)
+
