@@ -3,6 +3,43 @@
 set -euo pipefail
 
 mkdir -p "${HERMES_HOME:-/data/hermes}" "${STAFFROOM_HOME:-/data/staffroom}"
+mkdir -p "${HERMES_HOME:-/data/hermes}/plugins"
+
+# Symlink our shipped plugins into HERMÉS's user plugin dir so they auto-load
+# without bloating the vendored hermes-agent tree. Idempotent.
+PLUGIN_NAMES=""
+for plugin_src in /app/plugins/*/; do
+  plugin_name="$(basename "$plugin_src")"
+  plugin_dst="${HERMES_HOME:-/data/hermes}/plugins/$plugin_name"
+  if [ ! -e "$plugin_dst" ]; then
+    ln -s "$plugin_src" "$plugin_dst"
+    echo "[start] linked plugin: $plugin_name"
+  fi
+  PLUGIN_NAMES="$PLUGIN_NAMES $plugin_name"
+done
+
+# HERMÉS plugins are opt-in via plugins.enabled in config.yaml. Make sure
+# every plugin we shipped is enabled. Idempotent — preserves any other config.
+PLUGIN_NAMES="$PLUGIN_NAMES" HERMES_HOME="${HERMES_HOME:-/data/hermes}" python3 - <<'PYEOF'
+import os, yaml
+path = os.path.join(os.environ["HERMES_HOME"], "config.yaml")
+cfg = {}
+if os.path.exists(path):
+    with open(path) as f:
+        cfg = yaml.safe_load(f) or {}
+plugins = cfg.setdefault("plugins", {})
+enabled = plugins.setdefault("enabled", [])
+shipped = [n for n in os.environ.get("PLUGIN_NAMES", "").split() if n]
+added = False
+for name in shipped:
+    if name not in enabled:
+        enabled.append(name)
+        added = True
+if added:
+    with open(path, "w") as f:
+        yaml.safe_dump(cfg, f, sort_keys=False)
+    print(f"[start] enabled plugins: {shipped}")
+PYEOF
 
 # Mint a token on first boot if one isn't supplied, persist for both services.
 if [ -z "${STAFFROOM_AUTH_TOKEN:-}" ] && [ -z "${STAFFROOM_AUTH_DISABLED:-}" ]; then

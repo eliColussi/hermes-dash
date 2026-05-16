@@ -36,6 +36,10 @@ COPY --from=web-build /web/.next/standalone /app/apps/web
 COPY --from=web-build /web/.next/static /app/apps/web/.next/static
 COPY --from=web-build /web/public /app/apps/web/public
 
+# Staff Room OS plugins (Composio, future audit hooks, etc.) — symlinked into
+# $HERMES_HOME/plugins at boot by start.sh.
+COPY plugins /app/plugins
+
 COPY scripts/start.sh /app/start.sh
 RUN chmod +x /app/start.sh
 

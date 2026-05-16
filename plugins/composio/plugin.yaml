@@ -1,0 +1,12 @@
+name: composio
+version: 0.1.0
+description: "Composio integration — gives HERMÉS agents access to 250+ SaaS apps (Gmail, Slack, HubSpot, Stripe, …) through the Composio tool gateway. Connections are managed via the Staff Room OS dashboard."
+author: Staff Room OS
+kind: standalone
+platforms:
+  - linux
+  - macos
+provides_tools:
+  - composio_list_apps
+  - composio_list_actions
+  - composio_execute
