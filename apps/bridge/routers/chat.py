@@ -10,6 +10,7 @@ Usage, and audit all stay consistent with scheduled / triggered runs.
 """
 from __future__ import annotations
 
+import asyncio
 import json
 import os
 import sqlite3
@@ -29,6 +30,11 @@ _GATEWAY_URL = (
     f"http://{os.environ.get('API_SERVER_HOST', '127.0.0.1')}:"
     f"{os.environ.get('API_SERVER_PORT', '8642')}/v1/chat/completions"
 )
+
+# Tracks chat turns in flight. Lets GET /messages know whether to keep
+# polling and lets the UI show a subtle "working…" indicator. Cleared
+# when the gateway call returns (success or fail).
+_PENDING: dict[str, dict] = {}  # thread_id -> {"started": float, "user_msg": str}
 
 router = APIRouter(
     prefix="/api/chat",
@@ -235,30 +241,75 @@ def delete_thread(thread_id: str) -> None:
     _save_threads(new)
 
 
+async def _run_gateway_turn(
+    thread_id: str,
+    user_msg: str,
+    headers: dict,
+    body: dict,
+) -> None:
+    """Background task that fires the gateway POST and updates thread state
+    when it finishes. Tool-heavy turns can take many minutes; the UI keeps
+    showing progress via state.db polling while this runs."""
+    try:
+        async with httpx.AsyncClient(timeout=600.0) as client:
+            r = await client.post(_GATEWAY_URL, json=body, headers=headers)
+        if r.status_code >= 400:
+            print(f"[chat] gateway error thread={thread_id} status={r.status_code} body={r.text[:300]}")
+            return
+        # Pin session on first turn
+        session_id = r.headers.get("X-Hermes-Session-Id")
+        if session_id:
+            threads = _load_threads()
+            thread = next((t for t in threads if t["id"] == thread_id), None)
+            if thread and not thread.get("session_id"):
+                thread["session_id"] = session_id
+                if thread.get("title") == "New conversation":
+                    thread["title"] = user_msg.strip()[:60]
+                _save_threads(threads)
+    except Exception as exc:
+        print(f"[chat] gateway call failed thread={thread_id}: {type(exc).__name__}: {exc}")
+    finally:
+        _PENDING.pop(thread_id, None)
+
+
 @router.get("/threads/{thread_id}/messages")
 def get_messages(thread_id: str) -> dict:
     threads = _load_threads()
     thread = next((t for t in threads if t["id"] == thread_id), None)
     if not thread:
         raise HTTPException(404, "Thread not found")
+    pending = _PENDING.get(thread_id)
+    messages = _thread_messages(thread.get("session_id"))
+    # Keep the just-sent user message visible while the session is still
+    # being pinned (first turn, gateway hasn't returned yet).
+    if pending and not messages:
+        messages = [{
+            "id": -1, "role": "user", "content": pending["user_msg"],
+            "tool_calls": None, "tool_name": None, "tool_call_id": None,
+            "timestamp": pending["started"], "reasoning": None,
+        }]
     return {
         "thread": thread,
-        "messages": _thread_messages(thread.get("session_id")),
+        "messages": messages,
+        "running": pending is not None,
+        "elapsed_sec": (time.time() - pending["started"]) if pending else None,
     }
 
 
 @router.post("/threads/{thread_id}/messages")
-def send_message(thread_id: str, payload: MessageSend) -> dict:
-    """Synchronous chat turn via the HERMÉS gateway's api_server platform.
+async def send_message(thread_id: str, payload: MessageSend) -> dict:
+    """Kick off the gateway call as a background task and return immediately.
 
-    The gateway is a long-lived process — no Python startup per message —
-    so a simple POST/await is the right shape. ~3-5s for a no-tool message,
-    longer for tool-heavy turns (bounded by the actual model + tool work,
-    not by our infrastructure)."""
+    The UI polls GET /messages every ~1.5s, watching tool calls + text
+    appear in state.db live as hermes works through them. This is the
+    right shape for chat turns that may involve many minutes of tool
+    execution (Gmail fetches, multi-step actions, etc.)."""
     threads = _load_threads()
     thread = next((t for t in threads if t["id"] == thread_id), None)
     if not thread:
         raise HTTPException(404, "Thread not found")
+    if thread_id in _PENDING:
+        raise HTTPException(409, "The agent is still responding to your last message.")
 
     agents = hc.load_agents()
     agent = next((a for a in agents if a.get("id") == thread["agent_id"]), None)
@@ -272,9 +323,6 @@ def send_message(thread_id: str, payload: MessageSend) -> dict:
     system_prompt = _compose_system_prompt(agent, toolkits)
 
     headers = {"Content-Type": "application/json"}
-    # The api_server gates session continuation on an API key. start.sh mints
-    # one at boot; pass it as Bearer so the X-Hermes-Session-Id header is
-    # honoured on turn 2+.
     api_key = os.environ.get("API_SERVER_KEY")
     if api_key:
         headers["Authorization"] = f"Bearer {api_key}"
@@ -290,30 +338,19 @@ def send_message(thread_id: str, payload: MessageSend) -> dict:
     }
 
     started = time.time()
-    try:
-        r = httpx.post(_GATEWAY_URL, json=body, headers=headers, timeout=180.0)
-    except httpx.RequestError as exc:
-        raise HTTPException(
-            503,
-            "Couldn't reach the HERMÉS gateway. It usually takes ~15s to come "
-            "up after a redeploy — try again. If it persists, ask your team "
-            f"to check the Railway logs. ({type(exc).__name__})",
-        )
-    elapsed = time.time() - started
-    print(f"[chat-timing] thread={thread_id} gateway_total={elapsed:.2f}s status={r.status_code}")
+    _PENDING[thread_id] = {"started": started, "user_msg": payload.content}
+    asyncio.create_task(_run_gateway_turn(thread_id, payload.content, headers, body))
 
-    if r.status_code >= 400:
-        raise HTTPException(r.status_code, f"Gateway error: {r.text[:400]}")
-
-    # Pin the session on first turn so subsequent messages continue it.
-    session_id = r.headers.get("X-Hermes-Session-Id")
-    if session_id and not thread.get("session_id"):
-        thread["session_id"] = session_id
-        if thread.get("title") == "New conversation":
-            thread["title"] = payload.content.strip()[:60]
-        _save_threads(threads)
-
+    existing = _thread_messages(thread.get("session_id"))
+    if not existing:
+        existing = [{
+            "id": -1, "role": "user", "content": payload.content,
+            "tool_calls": None, "tool_name": None, "tool_call_id": None,
+            "timestamp": started, "reasoning": None,
+        }]
     return {
         "thread": thread,
-        "messages": _thread_messages(thread.get("session_id")),
+        "messages": existing,
+        "running": True,
+        "elapsed_sec": 0.0,
     }

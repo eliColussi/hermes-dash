@@ -369,11 +369,11 @@ export const chat = {
     }),
   remove: (id: string) => fetch(`/api/chat/threads/${id}`, { method: "DELETE" }),
   messages: (id: string) =>
-    req<{ thread: ChatThread; messages: ChatMessage[] }>(
+    req<{ thread: ChatThread; messages: ChatMessage[]; running: boolean; elapsed_sec: number | null }>(
       `/api/chat/threads/${id}/messages`,
     ),
   send: (id: string, content: string) =>
-    req<{ thread: ChatThread; messages: ChatMessage[] }>(
+    req<{ thread: ChatThread; messages: ChatMessage[]; running: boolean; elapsed_sec: number | null }>(
       `/api/chat/threads/${id}/messages`,
       { method: "POST", body: JSON.stringify({ content }) },
     ),

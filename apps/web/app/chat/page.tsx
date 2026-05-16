@@ -1,7 +1,7 @@
 "use client";
 
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { ChevronDown, MessageSquare, Plus, Send, Trash2, Wrench } from "lucide-react";
+import { ChevronDown, MessageSquare, Plus, Send, Trash2 } from "lucide-react";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { Agent, ChatMessage, ChatThread, api, chat } from "@/lib/api";
 
@@ -158,10 +158,19 @@ function ChatPane({
   onDelete: () => void;
 }) {
   const qc = useQueryClient();
+  // Poll every 1.5s while the agent is still working. The bridge fires the
+  // gateway call in the background and hermes writes tool calls + text into
+  // state.db as they happen, so each poll picks up live progress (Gmail
+  // fetches, intermediate text, etc.) instead of the user staring at dead
+  // air for minutes during a multi-step task.
   const q = useQuery({
     queryKey: ["chat-messages", threadId],
     queryFn: () => chat.messages(threadId),
     refetchOnWindowFocus: false,
+    refetchInterval: (query) => {
+      const data = query.state.data;
+      return data?.running ? 1500 : false;
+    },
   });
 
   const sendMut = useMutation({
@@ -179,9 +188,12 @@ function ChatPane({
   const [pendingUser, setPendingUser] = useState<string | null>(null);
   const scrollRef = useRef<HTMLDivElement>(null);
 
+  const running = q.data?.running ?? false;
+  const elapsed = q.data?.elapsed_sec ?? null;
+
   useEffect(() => {
     scrollRef.current?.scrollTo({ top: scrollRef.current.scrollHeight, behavior: "smooth" });
-  }, [q.data?.messages?.length, sendMut.isPending, pendingUser]);
+  }, [q.data?.messages?.length, running, pendingUser]);
 
   function submit(e: React.FormEvent) {
     e.preventDefault();
@@ -195,9 +207,28 @@ function ChatPane({
   }
 
   const thread = q.data?.thread;
-  const serverMessages = (q.data?.messages ?? []).filter(
-    (m) => m.role !== "system",
-  );
+  const rawServerMessages = q.data?.messages ?? [];
+
+  // Tool calls and tool results are plumbing — the operator only cares
+  // about their own messages and the agent's final reply. While the agent
+  // is working we surface a single ephemeral "Did N actions" counter
+  // below the thinking bubble; once the turn finishes the noise is gone
+  // and only the conversation remains.
+  const serverMessages = rawServerMessages.filter((m) => {
+    if (m.role === "system" || m.role === "tool") return false;
+    if (m.role === "assistant") {
+      const text = (m.content ?? "").trim();
+      const isStub = !text || text === "..." || text === "…";
+      // Hide intermediate tool-call turns that have no user-facing text.
+      if (isStub) return false;
+    }
+    return true;
+  });
+
+  // Count tool calls since the last user message — the "this turn"
+  // activity that the thinking bubble can summarise.
+  const toolsInCurrentTurn = countToolsSinceLastUserMessage(rawServerMessages);
+
   // If the server's last user message is the one we just sent, drop the
   // optimistic pending bubble. Otherwise show it on top of the server set
   // so the user always sees their text the instant they submit.
@@ -255,8 +286,13 @@ function ChatPane({
         {messages.map((m) => (
           <MessageBubble key={m.id} m={m} agentIcon={agent?.icon ?? "🤖"} />
         ))}
-        {sendMut.isPending && (
-          <ThinkingBubble agentIcon={agent?.icon ?? "🤖"} />
+        {(running || sendMut.isPending) && (
+          <ThinkingBubble
+            agentIcon={agent?.icon ?? "🤖"}
+            elapsed={elapsed}
+            lastTool={lastToolName(rawServerMessages)}
+            toolCount={toolsInCurrentTurn}
+          />
         )}
         {sendMut.isError && (
           <div className="text-sm text-bad">
@@ -295,28 +331,10 @@ function ChatPane({
 }
 
 function MessageBubble({ m, agentIcon }: { m: ChatMessage; agentIcon: string }) {
+  // role==tool and empty-content assistant turns are filtered out upstream;
+  // here we only render real user messages and real agent replies — clean
+  // iMessage-style bubbles with no tool-call plumbing.
   const isUser = m.role === "user";
-  const isTool = m.role === "tool";
-  const parsed = m.tool_calls ? safeJSON(m.tool_calls) : null;
-  const toolCalls: Array<{ function?: { name?: string }; name?: string }> | null =
-    Array.isArray(parsed) ? (parsed as Array<{ function?: { name?: string }; name?: string }>) : null;
-
-  if (isTool) {
-    // Tool result — render as a compact collapsible card so the conversation
-    // doesn't get drowned in JSON.
-    return (
-      <details className="ml-12 text-[11px]">
-        <summary className="cursor-pointer text-muted flex items-center gap-1.5 hover:text-ink">
-          <Wrench className="w-3 h-3" />
-          <span className="font-mono">{m.tool_name || "tool"} result</span>
-        </summary>
-        <pre className="mt-1 p-2 bg-surface-2 border border-line rounded text-[10px] font-mono overflow-x-auto whitespace-pre-wrap max-h-48">
-          {(m.content ?? "").slice(0, 4000)}
-        </pre>
-      </details>
-    );
-  }
-
   return (
     <div className={`flex gap-2.5 ${isUser ? "justify-end" : "justify-start"}`}>
       {!isUser && (
@@ -331,43 +349,113 @@ function MessageBubble({ m, agentIcon }: { m: ChatMessage; agentIcon: string }) 
             : "bg-surface-2 border border-line rounded-tl-sm"
         }`}
       >
-        {m.content || <span className="italic text-muted">…</span>}
-        {toolCalls && toolCalls.length > 0 && (
-          <div className="mt-2 pt-2 border-t border-line/40 space-y-1">
-            {toolCalls.map((tc, i) => (
-              <div key={i} className="text-[10px] flex items-center gap-1.5 text-muted">
-                <Wrench className="w-2.5 h-2.5" />
-                <span className="font-mono">{tc?.function?.name ?? tc?.name ?? "tool"}</span>
-              </div>
-            ))}
-          </div>
+        {m.content}
+      </div>
+    </div>
+  );
+}
+
+function ThinkingBubble({
+  agentIcon,
+  elapsed,
+  lastTool,
+  toolCount,
+}: {
+  agentIcon: string;
+  elapsed: number | null;
+  lastTool: string | null;
+  toolCount: number;
+}) {
+  // Surface what the agent is doing right now (its latest tool) and how
+  // many tools it's run this turn — together that's the honest signal,
+  // without flooding the conversation with per-call rows. When the turn
+  // finishes the whole bubble disappears, so this is ephemeral by design.
+  const seconds = Math.floor(elapsed ?? 0);
+  const fallback =
+    seconds < 4 ? null
+    : seconds < 12 ? "Thinking…"
+    : seconds < 30 ? "Working on it."
+    : seconds < 90 ? "Still working — multi-step tasks can take a minute."
+    : "This is taking a while. Hang tight.";
+  const primary = lastTool ? `Calling ${prettyToolLabel(lastTool)}…` : fallback;
+  const counter = toolCount > 0 ? `${toolCount} action${toolCount === 1 ? "" : "s"} so far` : null;
+  return (
+    <div className="flex gap-2.5 justify-start">
+      <div className="w-7 h-7 rounded-full bg-[var(--bg)] border border-line flex items-center justify-center text-sm shrink-0">
+        {agentIcon}
+      </div>
+      <div className="px-3.5 py-2.5 rounded-2xl rounded-tl-sm bg-surface-2 border border-line flex items-center gap-2.5">
+        <div className="flex gap-1">
+          <span className="w-1.5 h-1.5 rounded-full bg-muted animate-bounce" style={{ animationDelay: "0ms" }} />
+          <span className="w-1.5 h-1.5 rounded-full bg-muted animate-bounce" style={{ animationDelay: "150ms" }} />
+          <span className="w-1.5 h-1.5 rounded-full bg-muted animate-bounce" style={{ animationDelay: "300ms" }} />
+        </div>
+        {primary && <span className="text-[11px] text-muted">{primary}</span>}
+        {counter && (
+          <span className="text-[10px] text-muted/70 border-l border-line pl-2.5">
+            {counter}
+          </span>
         )}
       </div>
     </div>
   );
 }
 
-function ThinkingBubble({ agentIcon }: { agentIcon: string }) {
-  return (
-    <div className="flex gap-2.5 justify-start">
-      <div className="w-7 h-7 rounded-full bg-[var(--bg)] border border-line flex items-center justify-center text-sm shrink-0">
-        {agentIcon}
-      </div>
-      <div className="px-3.5 py-2.5 rounded-2xl rounded-tl-sm bg-surface-2 border border-line">
-        <div className="flex gap-1">
-          <span className="w-1.5 h-1.5 rounded-full bg-muted animate-bounce" style={{ animationDelay: "0ms" }} />
-          <span className="w-1.5 h-1.5 rounded-full bg-muted animate-bounce" style={{ animationDelay: "150ms" }} />
-          <span className="w-1.5 h-1.5 rounded-full bg-muted animate-bounce" style={{ animationDelay: "300ms" }} />
-        </div>
-      </div>
-    </div>
-  );
+// Count tool calls (both `role:tool` results and assistant turns with
+// tool_calls payloads) recorded since the most recent user message.
+// Gives the thinking bubble an honest "N actions so far" without scanning
+// the entire conversation history.
+function countToolsSinceLastUserMessage(messages: ChatMessage[]): number {
+  let count = 0;
+  for (let i = messages.length - 1; i >= 0; i--) {
+    const m = messages[i];
+    if (m.role === "user") break;
+    if (m.role === "tool") count++;
+    else if (m.role === "assistant" && m.tool_calls) {
+      try {
+        const arr = JSON.parse(m.tool_calls);
+        if (Array.isArray(arr)) count += arr.length;
+      } catch {
+        /* ignore */
+      }
+    }
+  }
+  return count;
 }
 
-function safeJSON(s: string): unknown {
-  try {
-    return JSON.parse(s);
-  } catch {
-    return null;
+// Find the most recent tool call in the rendered list so the thinking
+// indicator can announce "Calling Gmail…" instead of just bouncing dots.
+function lastToolName(messages: ChatMessage[]): string | null {
+  for (let i = messages.length - 1; i >= 0; i--) {
+    const m = messages[i];
+    if (m.tool_name) return m.tool_name;
+    if (m.tool_calls) {
+      try {
+        const arr = JSON.parse(m.tool_calls) as Array<{ function?: { name?: string }; name?: string }>;
+        if (Array.isArray(arr) && arr.length > 0) {
+          return arr[0]?.function?.name ?? arr[0]?.name ?? null;
+        }
+      } catch {
+        /* ignore */
+      }
+    }
   }
+  return null;
 }
+
+function prettyToolLabel(toolName: string): string {
+  // composio_execute is the workhorse — the actual action is usually in
+  // the tool_calls payload, not the name. Fall back to a friendly synonym.
+  const t = toolName.toLowerCase();
+  if (t.startsWith("gmail")) return "Gmail";
+  if (t.startsWith("googledrive") || t.startsWith("drive")) return "Google Drive";
+  if (t.startsWith("googlecalendar") || t.startsWith("calendar")) return "Google Calendar";
+  if (t.startsWith("slack")) return "Slack";
+  if (t.startsWith("github")) return "GitHub";
+  if (t === "composio_execute") return "an integration";
+  if (t === "composio_list_actions" || t === "composio_list_apps") return "the integration catalog";
+  if (t === "memory_read" || t === "memory_write") return "memory";
+  if (t === "web_search") return "web search";
+  return toolName;
+}
+
