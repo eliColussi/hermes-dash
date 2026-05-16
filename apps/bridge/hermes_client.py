@@ -258,7 +258,38 @@ def stop_agent(agent_id: str) -> bool:
 
 
 def count_agent_sessions_today(agent_id: str) -> int:
-    """Sessions that started while this agent was running today."""
+    """Real per-agent attribution via the staffroom-audit JSONL.
+
+    Counts distinct sessions that started TODAY where session_start was
+    tagged with agent_id == this one. Falls back to the uptime-window
+    heuristic when the audit log is unavailable (e.g. audit plugin disabled).
+    """
+    import json as _json
+    from datetime import datetime as _dt
+    from .config import STAFFROOM_HOME as _SH
+
+    audit_path = _SH / "audit" / f"{_dt.utcnow():%Y-%m-%d}.jsonl"
+    if audit_path.exists():
+        seen: set[str] = set()
+        try:
+            for line in audit_path.read_text(encoding="utf-8", errors="replace").splitlines():
+                if not line.strip():
+                    continue
+                try:
+                    evt = _json.loads(line)
+                except _json.JSONDecodeError:
+                    continue
+                if (
+                    evt.get("event") == "session_start"
+                    and evt.get("agent_id") == agent_id
+                    and evt.get("session_id")
+                ):
+                    seen.add(evt["session_id"])
+            return len(seen)
+        except OSError:
+            pass
+
+    # Fallback: uptime-window heuristic
     started = agent_started_at(agent_id)
     if started is None:
         return 0
