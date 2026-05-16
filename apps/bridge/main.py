@@ -8,7 +8,7 @@ from fastapi.middleware.cors import CORSMiddleware
 
 from . import auth
 from .config import ensure_dirs
-from .routers import activity, agents, composio, integrations, logs, overview, settings, skills, tasks
+from .routers import activity, agents, composio, integrations, logs, overview, schedules, settings, skills, tasks
 
 app = FastAPI(title="Staff Room OS Bridge", version="0.1.0")
 
@@ -36,6 +36,7 @@ app.include_router(logs.router)  # logs handles auth per-route (WS uses query st
 app.include_router(skills.router, dependencies=_authed)
 app.include_router(integrations.router, dependencies=_authed)
 app.include_router(composio.router)  # composio router enforces its own auth
+app.include_router(schedules.router)  # schedules router enforces its own auth
 app.include_router(settings.router)  # settings router already enforces auth
 
 

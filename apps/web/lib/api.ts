@@ -141,6 +141,48 @@ export interface ComposioStatus {
   init_error: string | null;
 }
 
+// Schedules (HERMÉS cron)
+export interface Schedule {
+  id: string;
+  name: string;
+  prompt: string;
+  schedule: { kind: string; display?: string; expr?: string; minutes?: number; run_at?: string };
+  schedule_display: string;
+  next_run_at: string | null;
+  last_run_at: string | null;
+  last_status: string | null;
+  repeat: { times: number | null; completed: number } | null;
+  repeat_count: number;
+  deliver: string | null;
+  enabled: boolean;
+  disabled_reason: string | null;
+  model: string | null;
+  created_at: string;
+}
+
+export const schedules = {
+  list: () => req<{ items: Schedule[]; total: number }>("/api/schedules"),
+  create: (body: {
+    prompt: string;
+    schedule: string;
+    name?: string;
+    repeat?: number;
+    deliver?: string;
+    model?: string;
+    skills?: string[];
+  }) =>
+    req<Schedule>("/api/schedules", { method: "POST", body: JSON.stringify(body) }),
+  patch: (id: string, body: Partial<{ name: string; prompt: string; schedule: string; repeat: number; deliver: string; model: string; enabled: boolean }>) =>
+    req<Schedule>(`/api/schedules/${id}`, {
+      method: "PATCH",
+      body: JSON.stringify(body),
+    }),
+  trigger: (id: string) =>
+    req<Schedule>(`/api/schedules/${id}/trigger`, { method: "POST" }),
+  remove: (id: string) =>
+    fetch(`/api/schedules/${id}`, { method: "DELETE" }),
+};
+
 export const composio = {
   status: () => req<ComposioStatus>("/api/composio/status"),
   toolkits: () =>

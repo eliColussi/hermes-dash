@@ -35,7 +35,7 @@ const PRIMARY = [
 const OPERATIONS = [
   { label: "Messages", icon: MessageSquare, soon: true },
   { label: "Approvals", icon: ShieldCheck, soon: true },
-  { label: "Workflows", icon: Workflow, soon: true },
+  { href: "/schedules", label: "Schedules", icon: Workflow },
   { href: "/integrations", label: "Integrations", icon: Plug },
   { label: "Goals", icon: Target, soon: true },
   { label: "Analytics", icon: BarChart3, soon: true },
