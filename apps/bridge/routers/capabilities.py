@@ -29,11 +29,34 @@ def _web_search_backend() -> str | None:
     return None
 
 
+def _llm_provider() -> tuple[str | None, str | None]:
+    """Returns (provider_name, key_env) for the configured LLM, or (None, None)."""
+    for env, name in (
+        ("OPENROUTER_API_KEY", "OpenRouter"),
+        ("ANTHROPIC_API_KEY", "Anthropic"),
+        ("OPENAI_API_KEY", "OpenAI"),
+    ):
+        if os.environ.get(env):
+            return name, env
+    return None, None
+
+
 @router.get("")
 def capabilities() -> dict:
     web_backend = _web_search_backend()
+    llm_name, llm_key = _llm_provider()
     return {
+        "llm_ready": llm_name is not None,
+        "llm_provider": llm_name,
         "items": [
+            {
+                "id": "llm",
+                "ready": llm_name is not None,
+                "detail": (
+                    f"Using {llm_name}." if llm_name
+                    else "No LLM provider configured. Ask your team to set OPENROUTER_API_KEY (recommended), ANTHROPIC_API_KEY, or OPENAI_API_KEY."
+                ),
+            },
             {
                 "id": "composio",
                 "ready": cc.is_configured(),
