@@ -109,6 +109,22 @@ if [ -z "${STAFFROOM_AUTH_TOKEN:-}" ] && [ -z "${STAFFROOM_AUTH_DISABLED:-}" ]; 
   export STAFFROOM_AUTH_TOKEN="$(cat "$TOKEN_FILE")"
 fi
 
+# Mint API_SERVER_KEY *before* launching the bridge so the bridge process
+# inherits it in its env (used to authenticate session-continuation calls
+# to the gateway's api_server). Also exported here so the gateway, launched
+# later in this script, sees the same value.
+export API_SERVER_ENABLED="${API_SERVER_ENABLED:-true}"
+export API_SERVER_HOST="${API_SERVER_HOST:-127.0.0.1}"
+export API_SERVER_PORT="${API_SERVER_PORT:-8642}"
+API_SERVER_KEY_FILE="${STAFFROOM_HOME:-/data/staffroom}/api-server-key"
+if [ -z "${API_SERVER_KEY:-}" ]; then
+  if [ ! -s "$API_SERVER_KEY_FILE" ]; then
+    python3 -c "import secrets; print(secrets.token_urlsafe(32))" > "$API_SERVER_KEY_FILE"
+    chmod 600 "$API_SERVER_KEY_FILE"
+  fi
+  export API_SERVER_KEY="$(cat "$API_SERVER_KEY_FILE")"
+fi
+
 # Bridge runs on a fixed internal port; not exposed externally.
 echo "[start] launching bridge on 127.0.0.1:8787"
 cd /app
@@ -123,25 +139,9 @@ done
 
 trap 'kill $BRIDGE_PID $GATEWAY_PID 2>/dev/null || true' EXIT INT TERM
 
-# Auto-start the HERMÉS gateway in a restart loop. The gateway hosts the
-# api_server platform (OpenAI-compatible POST /v1/chat/completions) which the
-# dashboard chat uses for sub-second turns — no per-message subprocess. It
-# also handles Telegram/Slack/Discord/webhook traffic when those are wired.
-export API_SERVER_ENABLED="${API_SERVER_ENABLED:-true}"
-export API_SERVER_HOST="${API_SERVER_HOST:-127.0.0.1}"
-export API_SERVER_PORT="${API_SERVER_PORT:-8642}"
-# hermes' api_server requires an API key before it'll honour the
-# X-Hermes-Session-Id header (otherwise conversations can't continue
-# past turn 1). Mint a random one at first boot and persist alongside
-# our other secrets. Bridge picks it up via the same env.
-API_SERVER_KEY_FILE="${STAFFROOM_HOME:-/data/staffroom}/api-server-key"
-if [ -z "${API_SERVER_KEY:-}" ]; then
-  if [ ! -s "$API_SERVER_KEY_FILE" ]; then
-    python3 -c "import secrets; print(secrets.token_urlsafe(32))" > "$API_SERVER_KEY_FILE"
-    chmod 600 "$API_SERVER_KEY_FILE"
-  fi
-  export API_SERVER_KEY="$(cat "$API_SERVER_KEY_FILE")"
-fi
+# Auto-start the HERMÉS gateway in a restart loop. Hosts the api_server
+# platform (POST /v1/chat/completions) for the dashboard chat plus the
+# messaging platforms (Telegram/Slack/Discord/webhook) when configured.
 # hermes is installed system-wide (uv pip install --system) in the Docker
 # build, so just resolve via PATH instead of a hard-coded venv path.
 HERMES_BIN_PATH="$(command -v hermes || true)"
