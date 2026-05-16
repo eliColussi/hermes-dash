@@ -30,7 +30,7 @@ from typing import Any, Iterator, Optional
 from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel, Field
 
-from .. import auth, hermes_client as hc
+from .. import auth, composio_link as cc, hermes_client as hc
 from ..config import HERMES_BIN, HERMES_STATE_DB, STAFFROOM_HOME
 
 router = APIRouter(
@@ -76,6 +76,20 @@ def _state_ro() -> Iterator[Optional[sqlite3.Connection]]:
         conn.close()
 
 
+_BRIEFING_END = "<<< END BRIEFING >>>"
+
+
+def _strip_briefing(content: Optional[str]) -> Optional[str]:
+    """If a user message starts with our system-briefing wrapper, return only
+    the operator's actual text. The briefing is plumbing — it shouldn't
+    appear in the chat surface."""
+    if not content:
+        return content
+    if _BRIEFING_END in content:
+        return content.split(_BRIEFING_END, 1)[1].strip()
+    return content
+
+
 def _thread_messages(session_id: Optional[str]) -> list[dict]:
     if not session_id:
         return []
@@ -92,7 +106,88 @@ def _thread_messages(session_id: Optional[str]) -> list[dict]:
             """,
             (session_id,),
         ).fetchall()
-        return [dict(r) for r in rows]
+        out = []
+        for r in rows:
+            d = dict(r)
+            if d.get("role") == "user":
+                d["content"] = _strip_briefing(d.get("content"))
+            out.append(d)
+        return out
+
+
+def _connected_composio_toolkits() -> list[str]:
+    """Names of toolkits with an active Composio connection. Empty if Composio
+    isn't configured or the operator hasn't connected anything yet."""
+    client = cc.get_client()
+    if client is None:
+        return []
+    try:
+        resp = client.connected_accounts.list(user_ids=[cc.STAFFROOM_USER_ID])
+    except Exception:
+        return []
+    out: list[str] = []
+    for acc in getattr(resp, "items", []) or []:
+        tk = getattr(acc, "toolkit", None)
+        slug = (
+            (tk.get("slug") or tk.get("name") or "") if isinstance(tk, dict)
+            else (getattr(tk, "slug", None) or getattr(tk, "name", None) or "")
+        )
+        if slug and slug not in out:
+            out.append(slug)
+    return out
+
+
+def _compose_system_prompt(agent: dict, toolkits: list[str]) -> str:
+    """Stitch the agent's authored prompt with operator-supplied context so
+    the agent never wastes turns discovering what's already known. Also
+    nudges the model toward structured tool calls instead of describing
+    tool calls as text (a common failure mode on multi-step tasks)."""
+    parts: list[str] = []
+    base = (agent.get("system_prompt") or agent.get("description") or "").strip()
+    if base:
+        parts.append(base)
+
+    if toolkits:
+        nice = ", ".join(t.replace("googlecalendar", "Google Calendar")
+                          .replace("googledrive", "Google Drive")
+                          .replace("github", "GitHub")
+                          .replace("hubspot", "HubSpot")
+                          .replace("salesforce", "Salesforce")
+                          .replace("gmail", "Gmail")
+                          .replace("slack", "Slack")
+                          .replace("notion", "Notion")
+                          .replace("calendly", "Calendly")
+                          .replace("stripe", "Stripe")
+                          .replace("linear", "Linear")
+                          .replace("airtable", "Airtable")
+                          .replace("intercom", "Intercom")
+                          .replace("zoom", "Zoom")
+                          .replace("trello", "Trello")
+                          .replace("discord", "Discord")
+                          .replace("shopify", "Shopify")
+                          .replace("asana", "Asana")
+                          .title() if " " not in t else t for t in toolkits)
+        parts.append(
+            f"### Tools available to you right now\n"
+            f"You have these apps already connected via Composio (the user "
+            f"linked them in the dashboard): **{nice}**.\n\n"
+            f"To use them, call the `composio_execute` tool with the right "
+            f"action slug. For example, to read Gmail you'd call `composio_execute` "
+            f"with `action='GMAIL_FETCH_EMAILS'`. If you don't know the exact "
+            f"action name for a toolkit, call `composio_list_actions` once with "
+            f"the toolkit slug — do NOT call `composio_list_apps` first, the "
+            f"list above is authoritative."
+        )
+
+    parts.append(
+        "### How to act\n"
+        "When a task requires an external tool, **call the tool directly** "
+        "using your structured tool-calling capability. Do not write out tool "
+        "calls as JSON in your reply — actually invoke them. After getting "
+        "results, respond to the user in plain conversational language with "
+        "the outcome, not the raw payload."
+    )
+    return "\n\n".join(parts)
 
 
 def _latest_session_for_source(source_tag: str, since: float) -> Optional[str]:
@@ -239,10 +334,28 @@ def send_message(thread_id: str, payload: MessageSend) -> dict:
     )
     toolsets_arg = ",".join(t for t in toolsets_list if t and t != "default")
 
+    # `hermes chat` has no --system flag, so we inject context into the
+    # query text itself. On turn 1 we prepend the full agent identity +
+    # connected-apps briefing so the agent never wastes turns discovering
+    # what's already known. On turn N>1 the agent has the briefing in its
+    # session history and we just send the user's text.
+    is_first_turn = not thread.get("session_id")
+    if is_first_turn:
+        toolkits = _connected_composio_toolkits() if "composio" in (toolsets_list or []) else []
+        briefing = _compose_system_prompt(agent, toolkits)
+        query_text = (
+            f"<<< SYSTEM BRIEFING — read this carefully, then act on the user's message below >>>\n\n"
+            f"{briefing}\n\n"
+            f"<<< END BRIEFING >>>\n\n"
+            f"{payload.content}"
+        )
+    else:
+        query_text = payload.content
+
     cmd = [
         HERMES_BIN,
         "chat",
-        "-q", payload.content,
+        "-q", query_text,
         "--quiet",
         "--source", source_tag,
         "--model", agent.get("model", "claude-sonnet-4-6"),
@@ -253,13 +366,7 @@ def send_message(thread_id: str, payload: MessageSend) -> dict:
     if thread.get("session_id"):
         cmd.extend(["-r", thread["session_id"]])
 
-    env = {
-        **os.environ,
-        "STAFFROOM_AGENT_ID": agent["id"],
-        # HERMES_SYSTEM_PROMPT is read by hermes when set; system prompt
-        # only applies on first turn of a session.
-        "HERMES_SYSTEM_PROMPT": agent.get("system_prompt") or agent.get("description", ""),
-    }
+    env = {**os.environ, "STAFFROOM_AGENT_ID": agent["id"]}
 
     try:
         result = subprocess.run(
