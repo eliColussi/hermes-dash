@@ -184,27 +184,12 @@ function AddAgentSheet({ onClose, onCreated }: { onClose: () => void; onCreated:
           </button>
           <button
             disabled={busy || !name}
-            className="flex-1 px-4 py-2 bg-blue-600 text-white rounded-lg text-sm disabled:opacity-50"
+            className="btn-primary flex-1 disabled:opacity-40"
           >
             {busy ? "Creating..." : "Create agent"}
           </button>
         </div>
 
-        <style jsx>{`
-          .input {
-            width: 100%;
-            padding: 8px 12px;
-            border-radius: 10px;
-            border: 1px solid var(--line);
-            background: var(--bg);
-            font-size: 14px;
-            color: var(--ink);
-          }
-          .input:focus {
-            outline: none;
-            box-shadow: 0 0 0 3px rgba(59, 130, 246, 0.25);
-          }
-        `}</style>
       </form>
     </div>
   );

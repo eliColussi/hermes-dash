@@ -48,7 +48,7 @@ export default function AgentsPage() {
 
       {q.isLoading && <div className="text-sm text-muted mt-6">Loading…</div>}
       {q.isError && (
-        <div className="text-sm text-red-600 mt-6">
+        <div className="text-sm text-bad mt-6">
           Bridge unreachable. Is the FastAPI service running on :8787?
         </div>
       )}

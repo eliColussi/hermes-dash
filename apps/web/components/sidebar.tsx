@@ -35,17 +35,24 @@ export function Sidebar() {
   const pathname = usePathname();
 
   return (
-    <aside className="w-[260px] shrink-0 border-r border-line bg-[var(--surface)] flex flex-col">
-      <div className="px-5 pt-5 pb-3 font-medium tracking-tight">Staff Room OS</div>
+    <aside className="w-[260px] shrink-0 border-r border-line bg-surface flex flex-col">
+      <div className="px-5 pt-6 pb-4">
+        <div className="font-display text-[19px] leading-none tracking-tight text-ink">
+          Staff Room
+        </div>
+        <div className="text-[10px] uppercase tracking-[0.18em] text-muted mt-1">
+          Operating System
+        </div>
+      </div>
 
-      <div className="px-3 pb-2">
+      <div className="px-3 pb-3">
         <div className="relative">
-          <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted" />
+          <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-muted" />
           <input
-            placeholder="Search..."
-            className="w-full pl-9 pr-10 py-2 text-sm rounded-xl border border-line bg-[var(--bg)] focus:outline-none focus:ring-2 focus:ring-blue-500/30"
+            placeholder="Search"
+            className="w-full pl-9 pr-9 py-2 text-sm rounded-xl border border-line bg-surface-2 focus:outline-none focus:border-accent focus:shadow-[0_0_0_3px_var(--accent-soft)] transition"
           />
-          <span className="absolute right-3 top-1/2 -translate-y-1/2 text-xs text-muted">/</span>
+          <span className="absolute right-3 top-1/2 -translate-y-1/2 text-[10px] text-muted font-mono">/</span>
         </div>
       </div>
 
@@ -74,7 +81,7 @@ export function Sidebar() {
           <Settings className="w-4 h-4" />
           <span>Settings</span>
         </Link>
-        <div className="text-xs text-muted px-3 pt-2">v0.1.0</div>
+        <div className="text-[10px] text-muted px-3 pt-3 tracking-wider uppercase">v0.1</div>
       </div>
     </aside>
   );

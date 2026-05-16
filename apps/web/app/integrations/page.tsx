@@ -42,7 +42,7 @@ export default function ConnectionsPage() {
                 </div>
                 {configured ? (
                   <span
-                    className="flex items-center justify-center w-6 h-6 rounded-full bg-green-50 text-green-600 dark:bg-green-950 dark:text-green-300"
+                    className="flex items-center justify-center w-6 h-6 rounded-full bg-accent-soft text-ok"
                     title="Configured"
                   >
                     <Check className="w-3.5 h-3.5" />

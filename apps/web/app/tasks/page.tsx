@@ -54,7 +54,7 @@ export default function TasksPage() {
         />
         <button
           disabled={!title.trim() || create.isPending}
-          className="px-4 py-2 bg-blue-600 text-white rounded-lg text-sm disabled:opacity-50"
+          className="btn-primary disabled:opacity-40"
         >
           Delegate
         </button>

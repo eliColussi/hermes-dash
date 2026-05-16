@@ -7,11 +7,11 @@ import { AuditEntry, api, audit } from "@/lib/api";
 type View = "sessions" | "audit";
 
 const EVENT_BADGE: Record<string, string> = {
-  session_start: "bg-blue-50 text-blue-700",
-  session_end: "bg-gray-100 text-gray-700",
-  tool_call: "bg-purple-50 text-purple-700",
-  approval_requested: "bg-orange-50 text-orange-700",
-  approval_responded: "bg-green-50 text-green-700",
+  session_start: "bg-accent-soft text-accent",
+  session_end: "bg-surface-3 text-ink-2",
+  tool_call: "bg-surface-3 text-ink-2",
+  approval_requested: "bg-surface-3 text-warn",
+  approval_responded: "bg-accent-soft text-ok",
 };
 
 export default function ActivityPage() {
@@ -171,12 +171,12 @@ function SessionDrawer({ id, onClose }: { id: string; onClose: () => void }) {
                 <span
                   className={`text-[10px] uppercase tracking-wider px-1.5 py-0.5 rounded ${
                     m.role === "user"
-                      ? "bg-blue-50 text-blue-700"
+                      ? "bg-accent-soft text-accent"
                       : m.role === "assistant"
-                      ? "bg-purple-50 text-purple-700"
+                      ? "bg-surface-3 text-ink-2"
                       : m.role === "tool"
-                      ? "bg-amber-50 text-amber-700"
-                      : "bg-gray-100 text-gray-600"
+                      ? "bg-surface-3 text-warn"
+                      : "bg-surface-3 text-muted"
                   }`}
                 >
                   {m.role}

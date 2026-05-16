@@ -45,7 +45,7 @@ export default function SchedulesPage() {
         </div>
         <button
           onClick={() => setOpen(true)}
-          className="px-3 py-2 rounded-lg bg-blue-600 text-white text-sm flex items-center gap-2"
+          className="btn-primary flex items-center gap-2"
         >
           <Plus className="w-4 h-4" /> New schedule
         </button>
@@ -275,7 +275,7 @@ function NewScheduleSheet({
           </button>
           <button
             disabled={busy || !name || !prompt}
-            className="flex-1 px-4 py-2 bg-blue-600 text-white rounded-lg text-sm disabled:opacity-50"
+            className="btn-primary flex-1 disabled:opacity-40"
           >
             {busy ? "Creating…" : "Create schedule"}
           </button>

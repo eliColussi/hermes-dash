@@ -111,14 +111,14 @@ export default function HomePage() {
       </div>
 
       {allDone ? (
-        <div className="card p-5 mt-8 bg-green-50/40 dark:bg-green-950/20 border-green-200 dark:border-green-900">
+        <div className="card p-5 mt-8 bg-accent-soft border-line">
           <div className="flex items-start gap-3">
-            <PartyPopper className="w-5 h-5 text-green-600 mt-0.5" />
+            <PartyPopper className="w-5 h-5 text-ok mt-0.5" />
             <div>
               <div className="font-medium">You&apos;re live.</div>
               <div className="text-sm text-muted mt-1">
                 Everything&apos;s wired up. Add more agents, connect more apps,
-                or check <Link className="text-blue-600" href="/analytics">Usage</Link> to
+                or check <Link className="link-accent" href="/analytics">Usage</Link> to
                 see what your team has been doing.
               </div>
             </div>
@@ -133,7 +133,7 @@ export default function HomePage() {
               </div>
               <div className="flex-1 h-1.5 bg-[var(--bg)] rounded">
                 <div
-                  className="h-full bg-green-500 rounded transition-all"
+                  className="h-full bg-accent-soft0 rounded transition-all"
                   style={{ width: `${(completed / steps.length) * 100}%` }}
                 />
               </div>
@@ -141,7 +141,7 @@ export default function HomePage() {
             {nextStep && (
               <Link
                 href={nextStep.href}
-                className="mt-3 inline-flex items-center gap-2 px-4 py-2 bg-blue-600 text-white rounded-lg text-sm"
+                className="btn-primary mt-3 inline-flex items-center gap-2"
               >
                 Next: {nextStep.cta} <ArrowRight className="w-4 h-4" />
               </Link>
@@ -158,7 +158,7 @@ export default function HomePage() {
               >
                 <div className="mt-0.5">
                   {s.done ? (
-                    <CheckCircle2 className="w-5 h-5 text-green-600" />
+                    <CheckCircle2 className="w-5 h-5 text-ok" />
                   ) : (
                     <Circle className="w-5 h-5 text-muted" />
                   )}
@@ -186,9 +186,13 @@ export default function HomePage() {
 
 function Stat({ label, value, accent }: { label: string; value: React.ReactNode; accent?: "ok" }) {
   return (
-    <div className="card p-4">
-      <div className="text-xs text-muted">{label}</div>
-      <div className={`text-2xl font-semibold mt-1 ${accent === "ok" ? "text-green-600" : ""}`}>
+    <div className="card card-hover p-5">
+      <div className="text-[11px] uppercase tracking-[0.14em] text-muted">{label}</div>
+      <div
+        className={`font-display text-3xl mt-2 tabular tracking-tight ${
+          accent === "ok" ? "text-ok" : "text-ink"
+        }`}
+      >
         {value}
       </div>
     </div>

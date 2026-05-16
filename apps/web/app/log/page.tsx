@@ -37,7 +37,7 @@ export default function LogPage() {
             key={f.name}
             onClick={() => setSelected(f.name)}
             className={`px-3 py-1.5 text-xs rounded-lg border ${
-              selected === f.name ? "border-blue-500 bg-blue-50 dark:bg-blue-950" : "border-line"
+              selected === f.name ? "border-accent bg-accent-soft" : "border-line"
             }`}
           >
             {f.name}

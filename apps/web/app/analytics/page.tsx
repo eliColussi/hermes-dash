@@ -109,7 +109,7 @@ function ByDay({ data }: { data: { day: string; cost: number; sessions: number }
           <div className="w-20 text-muted shrink-0">{d.day.slice(5)}</div>
           <div className="flex-1 h-4 bg-[var(--bg)] rounded overflow-hidden">
             <div
-              className="h-full bg-blue-500/70"
+              className="h-full bg-accent/70"
               style={{ width: `${(d.cost / max) * 100}%` }}
             />
           </div>
@@ -131,7 +131,7 @@ function ByModel({ data }: { data: { model: string; cost: number; sessions: numb
           <div className="w-40 truncate text-muted shrink-0" title={d.model}>{d.model}</div>
           <div className="flex-1 h-4 bg-[var(--bg)] rounded overflow-hidden">
             <div
-              className="h-full bg-purple-500/70"
+              className="h-full bg-accent/70"
               style={{ width: `${(d.cost / max) * 100}%` }}
             />
           </div>

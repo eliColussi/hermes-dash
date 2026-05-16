@@ -16,10 +16,10 @@ import { useState } from "react";
 import { Goal, goals } from "@/lib/api";
 
 const STATUS_TINT: Record<string, string> = {
-  active: "bg-blue-50 text-blue-700",
-  paused: "bg-gray-100 text-gray-700",
-  done: "bg-green-50 text-green-700",
-  archived: "bg-gray-50 text-gray-500",
+  active: "bg-accent-soft text-accent",
+  paused: "bg-surface-3 text-ink-2",
+  done: "bg-accent-soft text-accent",
+  archived: "bg-surface-3 text-muted",
 };
 
 export default function GoalsPage() {
@@ -43,7 +43,7 @@ export default function GoalsPage() {
         </div>
         <button
           onClick={() => setNewOpen(true)}
-          className="px-3 py-2 rounded-lg bg-blue-600 text-white text-sm flex items-center gap-2"
+          className="btn-primary flex items-center gap-2"
         >
           <Plus className="w-4 h-4" /> New goal
         </button>
@@ -150,7 +150,7 @@ function GoalCard({ g, onChange }: { g: Goal; onChange: () => void }) {
           onClick={() => {
             if (confirm(`Delete goal "${g.title}"?`)) del.mutate();
           }}
-          className="p-1.5 rounded hover:bg-red-50 dark:hover:bg-red-950 text-red-600"
+          className="p-1.5 rounded hover:bg-surface-3 text-bad"
           title="Delete"
         >
           <Trash2 className="w-3.5 h-3.5" />
@@ -183,7 +183,7 @@ function GoalCard({ g, onChange }: { g: Goal; onChange: () => void }) {
             />
             <button
               disabled={!note.trim()}
-              className="px-3 py-1.5 text-xs bg-blue-600 text-white rounded-lg disabled:opacity-50"
+              className="btn-primary text-xs disabled:opacity-40"
             >
               Log
             </button>
@@ -284,7 +284,7 @@ function NewGoalSheet({
           />
         </div>
 
-        {err && <div className="text-sm text-red-600">{err}</div>}
+        {err && <div className="text-sm text-bad">{err}</div>}
 
         <div className="mt-auto flex gap-2">
           <button
@@ -296,7 +296,7 @@ function NewGoalSheet({
           </button>
           <button
             disabled={busy || !title}
-            className="flex-1 px-4 py-2 bg-blue-600 text-white rounded-lg text-sm disabled:opacity-50"
+            className="btn-primary flex-1 disabled:opacity-40"
           >
             {busy ? "Creating…" : "Create goal"}
           </button>

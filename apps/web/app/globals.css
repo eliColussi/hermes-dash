@@ -2,53 +2,252 @@
 @tailwind components;
 @tailwind utilities;
 
+/* ─────────────────────────────────────────────────────────────────────────────
+   Staff Room OS — design system
+   Aesthetic: warm neutrals, editorial serif headlines, restrained accent.
+   Reference: Loro Piana / Swiss chalet luxury — composed, never loud.
+   ──────────────────────────────────────────────────────────────────────────── */
+
 :root {
-  --bg: #fafafa;
-  --surface: #ffffff;
-  --ink: #111213;
-  --muted: #6b7280;
-  --line: #e5e7eb;
+  /* Surfaces — warm cream paper, not cool grey */
+  --bg:           #F6F4EE;  /* oat cream */
+  --surface:     #FFFFFF;
+  --surface-2:   #FCFBF7;   /* elevated surface */
+  --surface-3:   #F1ECE0;   /* inset / muted block */
+
+  /* Text — warm near-black, not blue-black */
+  --ink:         #1A1816;
+  --ink-2:       #3A332D;   /* secondary text */
+  --muted:       #7A736A;
+
+  /* Hairlines — warm beige, never harsh */
+  --line:        #E6E0D2;
+  --line-strong: #D7CFBC;
+
+  /* Single accent — deep pine green (Swiss chalet) */
+  --accent:      #2A4540;
+  --accent-fg:   #F6F4EE;
+  --accent-soft: #E5EEEA;  /* tinted backgrounds */
+
+  /* Status — desaturated naturals, never red-yellow-green primaries */
+  --ok:          #588B6E;   /* sage */
+  --warn:        #C19853;   /* warm gold */
+  --bad:         #9C5A4F;   /* terracotta */
+
+  --shadow-soft: 0 1px 0 rgba(255,255,255,0.6) inset,
+                 0 1px 2px rgba(26,24,22,0.04),
+                 0 2px 8px rgba(26,24,22,0.04);
+  --shadow-lift: 0 1px 0 rgba(255,255,255,0.7) inset,
+                 0 2px 4px rgba(26,24,22,0.06),
+                 0 12px 24px -8px rgba(26,24,22,0.10);
 }
 
 .dark {
-  --bg: #0b0b0c;
-  --surface: #131315;
-  --ink: #f4f4f5;
-  --muted: #9ca3af;
-  --line: #27272a;
+  --bg:          #13110E;
+  --surface:     #1B1815;
+  --surface-2:   #221E1A;
+  --surface-3:   #2A2520;
+
+  --ink:         #F1ECE2;
+  --ink-2:       #C9C0B2;
+  --muted:       #8F867A;
+
+  --line:        #2D2823;
+  --line-strong: #3A332C;
+
+  --accent:      #7AA89F;   /* softer sage in dark */
+  --accent-fg:   #13110E;
+  --accent-soft: #1F2826;
+
+  --ok:          #7CB390;
+  --warn:        #D8B27D;
+  --bad:         #BC7B70;
+
+  --shadow-soft: 0 1px 0 rgba(255,255,255,0.04) inset,
+                 0 1px 2px rgba(0,0,0,0.3);
+  --shadow-lift: 0 1px 0 rgba(255,255,255,0.06) inset,
+                 0 2px 4px rgba(0,0,0,0.3),
+                 0 16px 32px -12px rgba(0,0,0,0.5);
 }
 
 html, body {
   background: var(--bg);
   color: var(--ink);
-  font-feature-settings: "ss01", "cv11";
+  font-family: var(--font-sans), ui-sans-serif, system-ui, -apple-system, sans-serif;
+  font-feature-settings: "ss01", "cv11", "calt";
+  text-rendering: optimizeLegibility;
 }
+
+/* Subtle paper texture on the body — almost invisible but warms the whole UI.
+   Comment out if you find it too much. */
+body::before {
+  content: "";
+  position: fixed;
+  inset: 0;
+  pointer-events: none;
+  z-index: 0;
+  background-image:
+    radial-gradient(rgba(26,24,22,0.018) 1px, transparent 1px);
+  background-size: 4px 4px;
+  opacity: 0.6;
+}
+.dark body::before {
+  background-image:
+    radial-gradient(rgba(241,236,226,0.02) 1px, transparent 1px);
+}
+
+/* Make sure content sits above the texture */
+main, aside { position: relative; z-index: 1; }
+
+/* ─── Typography ────────────────────────────────────────────────────────── */
+
+h1, h2, h3 {
+  font-family: var(--font-display), Georgia, serif;
+  font-feature-settings: "ss01";
+  letter-spacing: -0.012em;
+  font-weight: 500;
+  color: var(--ink);
+}
+
+h1 { font-variation-settings: "opsz" 96, "SOFT" 40; }
+h2 { font-variation-settings: "opsz" 36, "SOFT" 30; }
+
+/* Tabular numerics everywhere data shows up — cost, counts, dates */
+table, .nums, code, pre, .tabular { font-variant-numeric: tabular-nums; }
+
+code, pre, .mono { font-family: var(--font-mono), ui-monospace, monospace; }
+
+/* ─── Primitives ────────────────────────────────────────────────────────── */
 
 .card {
   background: var(--surface);
   border: 1px solid var(--line);
   border-radius: 14px;
+  box-shadow: var(--shadow-soft);
+  transition: box-shadow 200ms ease, transform 200ms ease;
+}
+.card-hover:hover {
+  box-shadow: var(--shadow-lift);
+  transform: translateY(-1px);
 }
 
+/* Inset / nested block (used inside cards for sub-sections) */
+.card-inset {
+  background: var(--surface-3);
+  border: 1px solid var(--line);
+  border-radius: 10px;
+}
+
+/* Sidebar nav item */
 .nav-item {
   display: flex;
   align-items: center;
   gap: 12px;
   padding: 8px 12px;
   border-radius: 10px;
-  color: var(--ink);
+  color: var(--ink-2);
   font-size: 14px;
   cursor: pointer;
   user-select: none;
+  transition: background-color 160ms ease, color 160ms ease;
 }
-.nav-item:hover { background: rgba(0,0,0,0.04); }
-.dark .nav-item:hover { background: rgba(255,255,255,0.05); }
-.nav-item.active { background: rgba(59,130,246,0.10); color: #2563eb; }
-.dark .nav-item.active { background: rgba(96,165,250,0.15); color: #93c5fd; }
+.nav-item:hover {
+  background: var(--surface-3);
+  color: var(--ink);
+}
+.nav-item.active {
+  background: var(--accent-soft);
+  color: var(--accent);
+  font-weight: 500;
+}
+.dark .nav-item.active { color: var(--accent); }
 
+/* Status dots — small + a quiet luminous edge so healthy ones feel alive */
 .dot {
-  width: 9px; height: 9px; border-radius: 999px; display: inline-block;
+  width: 8px;
+  height: 8px;
+  border-radius: 999px;
+  display: inline-block;
+  flex-shrink: 0;
 }
-.dot.healthy { background: #22c55e; }
-.dot.stale { background: #eab308; }
-.dot.down { background: #ef4444; }
+.dot.healthy { background: var(--ok);   box-shadow: 0 0 0 3px rgba(88,139,110,0.14); }
+.dot.stale   { background: var(--warn); box-shadow: 0 0 0 3px rgba(193,152,83,0.14); }
+.dot.down    { background: var(--bad);  box-shadow: 0 0 0 3px rgba(156,90,79,0.10); }
+
+/* Buttons — restrained, never gradient */
+.btn-primary {
+  background: var(--accent);
+  color: var(--accent-fg);
+  border: 1px solid var(--accent);
+  padding: 8px 14px;
+  border-radius: 10px;
+  font-size: 14px;
+  font-weight: 500;
+  letter-spacing: -0.005em;
+  transition: filter 160ms ease, transform 160ms ease;
+}
+.btn-primary:hover { filter: brightness(1.08); transform: translateY(-1px); }
+.btn-primary:active { transform: translateY(0); }
+.btn-primary:disabled { opacity: 0.4; cursor: not-allowed; transform: none; }
+
+.btn-ghost {
+  background: transparent;
+  color: var(--ink);
+  border: 1px solid var(--line-strong);
+  padding: 8px 14px;
+  border-radius: 10px;
+  font-size: 14px;
+  font-weight: 500;
+  transition: background-color 160ms ease;
+}
+.btn-ghost:hover { background: var(--surface-3); }
+
+/* Pills / chips */
+.chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 4px 10px;
+  border-radius: 999px;
+  background: var(--surface-3);
+  border: 1px solid var(--line);
+  color: var(--ink-2);
+  font-size: 11px;
+  font-weight: 500;
+  letter-spacing: 0.01em;
+}
+.chip-accent {
+  background: var(--accent-soft);
+  border-color: transparent;
+  color: var(--accent);
+}
+
+/* Inputs */
+.input {
+  width: 100%;
+  padding: 9px 12px;
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  background: var(--surface-2);
+  color: var(--ink);
+  font-size: 14px;
+  font-family: inherit;
+  transition: border-color 160ms ease, box-shadow 160ms ease;
+}
+.input:focus {
+  outline: none;
+  border-color: var(--accent);
+  box-shadow: 0 0 0 3px var(--accent-soft);
+}
+
+/* Make all generic <button> elements feel responsive */
+button { transition: opacity 160ms ease; }
+button:disabled { cursor: not-allowed; }
+
+/* Override default link blue with the accent everywhere */
+a { color: inherit; }
+.link-accent { color: var(--accent); text-decoration: none; }
+.link-accent:hover { text-decoration: underline; text-underline-offset: 3px; }
+
+/* Selection color */
+::selection { background: var(--accent); color: var(--accent-fg); }

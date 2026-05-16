@@ -69,7 +69,7 @@ export function ComposioPanel() {
     return (
       <div className="card p-5 mb-4">
         <div className="flex items-center gap-3 mb-2">
-          <Plug className="w-5 h-5 text-blue-600" />
+          <Plug className="w-5 h-5 link-accent" />
           <div className="font-medium">Composio (250+ apps)</div>
         </div>
         <div className="text-sm text-muted">
@@ -86,9 +86,9 @@ export function ComposioPanel() {
       <div className="flex items-start justify-between mb-3">
         <div>
           <div className="flex items-center gap-2 font-medium">
-            <Plug className="w-5 h-5 text-blue-600" />
+            <Plug className="w-5 h-5 link-accent" />
             Composio
-            <span className="text-xs text-green-600 ml-1">✓ Connected</span>
+            <span className="text-xs text-ok ml-1">✓ Connected</span>
           </div>
           <div className="text-xs text-muted mt-1">
             User: <code>{status.data.user_id}</code> · Click Connect to add an
@@ -97,7 +97,7 @@ export function ComposioPanel() {
         </div>
         <button
           onClick={() => setPicker(true)}
-          className="px-3 py-1.5 text-sm rounded-lg bg-blue-600 text-white"
+          className="btn-primary"
         >
           + Connect app
         </button>
@@ -130,7 +130,7 @@ export function ComposioPanel() {
                     if (confirm(`Disconnect ${c.toolkit}?`))
                       disconnectMut.mutate(c.id);
                   }}
-                  className="p-1.5 hover:bg-red-50 dark:hover:bg-red-950 text-red-600 rounded"
+                  className="p-1.5 hover:bg-surface-3 text-bad rounded"
                   title="Disconnect"
                 >
                   <Trash2 className="w-3.5 h-3.5" />
@@ -230,7 +230,7 @@ function ToolkitPicker({
                       <Plug className="w-4 h-4 text-muted" />
                     )}
                     <span className="text-sm font-medium flex-1 truncate">{t.name}</span>
-                    {isConnected && <Check className="w-3.5 h-3.5 text-green-600" />}
+                    {isConnected && <Check className="w-3.5 h-3.5 text-ok" />}
                   </div>
                   <div className="text-[10px] text-muted flex items-center gap-1">
                     {isConnecting ? (

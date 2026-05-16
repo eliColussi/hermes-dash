@@ -25,9 +25,9 @@ export default function ApprovalsPage() {
         Tools that need human approval before an agent runs them.
       </p>
 
-      <div className="card p-4 mb-6 bg-amber-50/40 dark:bg-amber-950/20 border-amber-200 dark:border-amber-900">
+      <div className="card p-4 mb-6 bg-surface-3 border-line">
         <div className="flex items-start gap-3">
-          <AlertTriangle className="w-5 h-5 text-amber-600 mt-0.5" />
+          <AlertTriangle className="w-5 h-5 text-warn mt-0.5" />
           <div className="text-sm">
             <strong>v1 limitation:</strong> The dashboard shows pending
             approvals in real time, but responding still happens at the
@@ -45,7 +45,7 @@ export default function ApprovalsPage() {
       <div className="card divide-y divide-line mb-8">
         {(pending.data?.items ?? []).length === 0 && (
           <div className="p-6 text-sm text-muted flex items-center gap-2">
-            <ShieldCheck className="w-4 h-4 text-green-600" /> Nothing waiting.
+            <ShieldCheck className="w-4 h-4 text-ok" /> Nothing waiting.
           </div>
         )}
         {(pending.data?.items ?? []).map((a, i) => (
@@ -101,8 +101,8 @@ function ApprovalRow({
             <span
               className={`text-[10px] uppercase tracking-wider mr-2 px-1.5 py-0.5 rounded ${
                 a.event === "approval_requested"
-                  ? "bg-orange-100 text-orange-700"
-                  : "bg-green-100 text-green-700"
+                  ? "bg-surface-3 text-warn"
+                  : "bg-green-100 text-ok"
               }`}
             >
               {a.event === "approval_requested" ? "REQUESTED" : "RESPONDED"}

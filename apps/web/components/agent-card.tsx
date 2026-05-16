@@ -51,7 +51,7 @@ export function AgentCard({ agent, onChange }: { agent: Agent; onChange: () => v
           <div className="absolute right-3 top-12 z-10 card py-1 min-w-[140px] shadow-lg">
             <button
               onClick={remove}
-              className="w-full flex items-center gap-2 px-3 py-2 text-sm text-red-600 hover:bg-red-50 dark:hover:bg-red-950"
+              className="w-full flex items-center gap-2 px-3 py-2 text-sm text-bad hover:bg-surface-3"
             >
               <Trash2 className="w-3.5 h-3.5" /> Delete
             </button>
@@ -64,21 +64,15 @@ export function AgentCard({ agent, onChange }: { agent: Agent; onChange: () => v
       </div>
 
       <div className="flex items-center gap-1.5 flex-wrap">
-        <span className="text-xs px-2 py-1 rounded-full bg-[var(--bg)] border border-line">
-          {agent.organization}
-        </span>
+        <span className="chip">{agent.organization}</span>
         {(agent.toolsets ?? []).map((t) => (
-          <span
-            key={t}
-            className="text-[10px] font-mono px-2 py-1 rounded-full bg-blue-50 text-blue-700 border border-blue-100 dark:bg-blue-950 dark:text-blue-300 dark:border-blue-900"
-            title="Toolset"
-          >
+          <span key={t} className="chip chip-accent font-mono" title="Tool">
             {t}
           </span>
         ))}
         {agent.model && (
           <span
-            className="text-[10px] font-mono px-2 py-1 rounded-full bg-[var(--bg)] border border-line text-muted truncate max-w-[140px]"
+            className="chip font-mono truncate max-w-[140px]"
             title={agent.model}
           >
             {agent.model.split("/").pop()}
@@ -96,10 +90,10 @@ export function AgentCard({ agent, onChange }: { agent: Agent; onChange: () => v
           onClick={toggle}
           disabled={busy}
           className={cn(
-            "flex items-center gap-1 px-2.5 py-1 rounded-md text-xs border",
+            "flex items-center gap-1 px-3 py-1 rounded-lg text-xs border transition",
             agent.status === "down"
-              ? "border-green-500/30 text-green-600 hover:bg-green-50 dark:hover:bg-green-950"
-              : "border-red-500/30 text-red-600 hover:bg-red-50 dark:hover:bg-red-950",
+              ? "border-line text-ok hover:bg-accent-soft hover:border-accent/40"
+              : "border-line text-bad hover:bg-surface-3",
             busy && "opacity-50 cursor-not-allowed",
           )}
         >
