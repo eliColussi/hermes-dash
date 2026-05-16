@@ -130,16 +130,20 @@ trap 'kill $BRIDGE_PID $GATEWAY_PID 2>/dev/null || true' EXIT INT TERM
 export API_SERVER_ENABLED="${API_SERVER_ENABLED:-true}"
 export API_SERVER_HOST="${API_SERVER_HOST:-127.0.0.1}"
 export API_SERVER_PORT="${API_SERVER_PORT:-8642}"
-HERMES_BIN_PATH="/app/apps/bridge/.venv/bin/hermes"
-if [ -x "$HERMES_BIN_PATH" ]; then
+# hermes is installed system-wide (uv pip install --system) in the Docker
+# build, so just resolve via PATH instead of a hard-coded venv path.
+HERMES_BIN_PATH="$(command -v hermes || true)"
+if [ -n "$HERMES_BIN_PATH" ]; then
+  echo "[start] hermes found at $HERMES_BIN_PATH — starting gateway with api_server on :$API_SERVER_PORT"
   (
     while true; do
-      echo "[start] launching hermes gateway"
       "$HERMES_BIN_PATH" gateway || echo "[start] hermes gateway exited; restarting in 5s"
       sleep 5
     done
   ) &
   GATEWAY_PID=$!
+else
+  echo "[start] ⚠️  hermes CLI not on PATH — chat will not work. Check the Docker build logs."
 fi
 
 # Web binds to $PORT (Railway/Render contract).
