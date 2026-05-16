@@ -272,6 +272,12 @@ def send_message(thread_id: str, payload: MessageSend) -> dict:
     system_prompt = _compose_system_prompt(agent, toolkits)
 
     headers = {"Content-Type": "application/json"}
+    # The api_server gates session continuation on an API key. start.sh mints
+    # one at boot; pass it as Bearer so the X-Hermes-Session-Id header is
+    # honoured on turn 2+.
+    api_key = os.environ.get("API_SERVER_KEY")
+    if api_key:
+        headers["Authorization"] = f"Bearer {api_key}"
     if thread.get("session_id"):
         headers["X-Hermes-Session-Id"] = thread["session_id"]
 

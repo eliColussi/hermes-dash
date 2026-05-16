@@ -130,6 +130,18 @@ trap 'kill $BRIDGE_PID $GATEWAY_PID 2>/dev/null || true' EXIT INT TERM
 export API_SERVER_ENABLED="${API_SERVER_ENABLED:-true}"
 export API_SERVER_HOST="${API_SERVER_HOST:-127.0.0.1}"
 export API_SERVER_PORT="${API_SERVER_PORT:-8642}"
+# hermes' api_server requires an API key before it'll honour the
+# X-Hermes-Session-Id header (otherwise conversations can't continue
+# past turn 1). Mint a random one at first boot and persist alongside
+# our other secrets. Bridge picks it up via the same env.
+API_SERVER_KEY_FILE="${STAFFROOM_HOME:-/data/staffroom}/api-server-key"
+if [ -z "${API_SERVER_KEY:-}" ]; then
+  if [ ! -s "$API_SERVER_KEY_FILE" ]; then
+    python3 -c "import secrets; print(secrets.token_urlsafe(32))" > "$API_SERVER_KEY_FILE"
+    chmod 600 "$API_SERVER_KEY_FILE"
+  fi
+  export API_SERVER_KEY="$(cat "$API_SERVER_KEY_FILE")"
+fi
 # hermes is installed system-wide (uv pip install --system) in the Docker
 # build, so just resolve via PATH instead of a hard-coded venv path.
 HERMES_BIN_PATH="$(command -v hermes || true)"
