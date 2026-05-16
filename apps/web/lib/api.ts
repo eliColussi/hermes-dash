@@ -113,6 +113,7 @@ export const api = {
     req<{
       integrations: Integration[];
       gateway: { running: boolean; pid: number | null; log: string };
+      vault_active: boolean;
     }>("/api/integrations"),
   saveIntegration: (provider: string, values: Record<string, string>) =>
     req<{ ok: boolean }>("/api/integrations", {

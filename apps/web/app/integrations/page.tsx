@@ -20,12 +20,33 @@ export default function IntegrationsPage() {
 
   const gw = q.data?.gateway;
 
+  const vaultActive = q.data?.vault_active ?? false;
+
   return (
     <div className="max-w-5xl mx-auto">
-      <h1 className="text-3xl font-semibold tracking-tight">Integrations</h1>
-      <p className="text-sm text-muted mt-1 mb-6">
-        Connect your agents to Slack, Telegram, and Discord via the HERMÉS gateway.
-      </p>
+      <div className="flex items-center justify-between mb-6">
+        <div>
+          <h1 className="text-3xl font-semibold tracking-tight">Integrations</h1>
+          <p className="text-sm text-muted mt-1">
+            Connect your agents to Slack, Telegram, and Discord via the HERMÉS gateway.
+          </p>
+        </div>
+        {vaultActive ? (
+          <span
+            className="text-[11px] px-2.5 py-1 rounded-full bg-green-50 text-green-700 border border-green-200 dark:bg-green-950 dark:text-green-300 dark:border-green-900 flex items-center gap-1.5"
+            title="STAFFROOM_SECRETS_KEY is set or vault.enc exists. New credentials are libsodium-encrypted at rest."
+          >
+            🔒 Encrypted at rest
+          </span>
+        ) : (
+          <span
+            className="text-[11px] px-2.5 py-1 rounded-full bg-amber-50 text-amber-700 border border-amber-200 dark:bg-amber-950 dark:text-amber-300 dark:border-amber-900"
+            title="Set STAFFROOM_SECRETS_KEY in Railway Variables to enable libsodium encryption for new credentials."
+          >
+            🔓 Plaintext on volume
+          </span>
+        )}
+      </div>
 
       <ComposioPanel />
 
