@@ -227,9 +227,6 @@ def send_message(thread_id: str, payload: MessageSend) -> dict:
         "--model", agent.get("model", "claude-sonnet-4-6"),
         "--ignore-rules",  # don't auto-inject random AGENTS.md from the cwd
     ]
-    if agent.get("system_prompt"):
-        # Pass via env so the prompt isn't truncated by arg-length limits.
-        pass
     if toolsets_arg:
         cmd.extend(["-t", toolsets_arg])
     if thread.get("session_id"):

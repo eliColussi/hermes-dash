@@ -67,7 +67,23 @@ async function req<T>(path: string, init?: RequestInit): Promise<T> {
     cache: "no-store",
     ...init,
   });
-  if (!r.ok) throw new Error(`${r.status} ${r.statusText}`);
+  if (!r.ok) {
+    // Surface the bridge's actual error body so 502s aren't silent — the
+    // server already includes a stderr tail in detail, we just need to
+    // bubble it up to the UI instead of swallowing it.
+    let detail = "";
+    try {
+      const body = await r.json();
+      detail = typeof body?.detail === "string" ? body.detail : JSON.stringify(body);
+    } catch {
+      try {
+        detail = await r.text();
+      } catch {
+        // give up
+      }
+    }
+    throw new Error(detail ? `${r.status}: ${detail}` : `${r.status} ${r.statusText}`);
+  }
   return r.json();
 }
 
