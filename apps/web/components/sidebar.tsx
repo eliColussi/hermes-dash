@@ -38,7 +38,7 @@ const OPERATIONS = [
   { href: "/approvals", label: "Approvals", icon: ShieldCheck },
   { href: "/integrations", label: "Integrations", icon: Plug },
   { label: "Goals", icon: Target, soon: true },
-  { label: "Analytics", icon: BarChart3, soon: true },
+  { href: "/analytics", label: "Analytics", icon: BarChart3 },
 ];
 
 const INTELLIGENCE = [

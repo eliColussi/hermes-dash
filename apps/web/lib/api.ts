@@ -224,6 +224,23 @@ export const approvals = {
   history: () => req<{ items: PendingApproval[]; count: number }>("/api/approvals/history"),
 };
 
+export interface AnalyticsTotals {
+  today: { sessions: number; cost: number; tokens: number; tool_calls: number };
+  window: { sessions: number; cost: number; tokens: number; tool_calls: number };
+}
+export interface AnalyticsView {
+  totals: AnalyticsTotals;
+  by_day: { day: string; sessions: number; cost: number; tokens: number; tool_calls: number }[];
+  by_model: { model: string; sessions: number; cost: number; tokens: number }[];
+  by_source: { source: string; sessions: number; cost: number }[];
+  by_agent: { agent_id: string; sessions: number }[];
+  state_db: "ok" | "not_found";
+}
+
+export const analytics = {
+  fetch: (days = 30) => req<AnalyticsView>(`/api/analytics?days=${days}`),
+};
+
 export const audit = {
   list: (params: { date?: string; limit?: number; event?: string } = {}) => {
     const qs = new URLSearchParams();
