@@ -158,10 +158,18 @@ function ChatPane({
   onDelete: () => void;
 }) {
   const qc = useQueryClient();
+  // Poll every 1.2s while the agent is still working. The bridge spawns
+  // the hermes subprocess in the background and writes tool calls + text
+  // straight into state.db; each poll picks up whatever's new so the user
+  // sees progress live instead of staring at dead air.
   const q = useQuery({
     queryKey: ["chat-messages", threadId],
     queryFn: () => chat.messages(threadId),
     refetchOnWindowFocus: false,
+    refetchInterval: (query) => {
+      const data = query.state.data;
+      return data?.running ? 1200 : false;
+    },
   });
 
   const sendMut = useMutation({
@@ -179,9 +187,12 @@ function ChatPane({
   const [pendingUser, setPendingUser] = useState<string | null>(null);
   const scrollRef = useRef<HTMLDivElement>(null);
 
+  const running = q.data?.running ?? false;
+  const elapsed = q.data?.elapsed_sec ?? null;
+
   useEffect(() => {
     scrollRef.current?.scrollTo({ top: scrollRef.current.scrollHeight, behavior: "smooth" });
-  }, [q.data?.messages?.length, sendMut.isPending, pendingUser]);
+  }, [q.data?.messages?.length, running, pendingUser]);
 
   function submit(e: React.FormEvent) {
     e.preventDefault();
@@ -255,7 +266,9 @@ function ChatPane({
         {messages.map((m) => (
           <MessageBubble key={m.id} m={m} agentIcon={agent?.icon ?? "🤖"} />
         ))}
-        {sendMut.isPending && <ThinkingBubble agentIcon={agent?.icon ?? "🤖"} />}
+        {(running || sendMut.isPending) && (
+          <ThinkingBubble agentIcon={agent?.icon ?? "🤖"} elapsed={elapsed} />
+        )}
         {sendMut.isError && (
           <div className="text-sm text-bad">
             {sendMut.error instanceof Error ? sendMut.error.message : "Something went wrong."}
@@ -345,18 +358,28 @@ function MessageBubble({ m, agentIcon }: { m: ChatMessage; agentIcon: string }) 
   );
 }
 
-function ThinkingBubble({ agentIcon }: { agentIcon: string }) {
+function ThinkingBubble({ agentIcon, elapsed }: { agentIcon: string; elapsed: number | null }) {
+  // After ~8s of silence, the operator deserves a hint about what's
+  // happening so a long Composio + Gmail roundtrip doesn't feel broken.
+  const seconds = Math.floor(elapsed ?? 0);
+  const hint =
+    seconds < 4 ? null
+    : seconds < 10 ? "Thinking…"
+    : seconds < 25 ? "Working on it — calling tools."
+    : seconds < 60 ? "Still working — long tool calls can take 30-60s."
+    : "This is taking longer than usual.";
   return (
     <div className="flex gap-2.5 justify-start">
       <div className="w-7 h-7 rounded-full bg-[var(--bg)] border border-line flex items-center justify-center text-sm shrink-0">
         {agentIcon}
       </div>
-      <div className="px-3.5 py-2.5 rounded-2xl rounded-tl-sm bg-surface-2 border border-line">
+      <div className="px-3.5 py-2.5 rounded-2xl rounded-tl-sm bg-surface-2 border border-line flex items-center gap-2">
         <div className="flex gap-1">
           <span className="w-1.5 h-1.5 rounded-full bg-muted animate-bounce" style={{ animationDelay: "0ms" }} />
           <span className="w-1.5 h-1.5 rounded-full bg-muted animate-bounce" style={{ animationDelay: "150ms" }} />
           <span className="w-1.5 h-1.5 rounded-full bg-muted animate-bounce" style={{ animationDelay: "300ms" }} />
         </div>
+        {hint && <span className="text-[11px] text-muted">{hint}</span>}
       </div>
     </div>
   );

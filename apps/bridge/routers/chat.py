@@ -41,6 +41,16 @@ router = APIRouter(
 
 _THREADS_FILE = STAFFROOM_HOME / "chat" / "threads.json"
 
+# In-flight subprocess registry, keyed by thread_id. We spawn the hermes
+# subprocess in the background and return immediately so the UI can poll
+# /messages and watch tool calls + text stream into state.db live, instead
+# of staring at a dead "thinking" indicator for 30-60 seconds while we
+# block-waiting on the subprocess. Single-process bridge → a plain dict is
+# enough; no lock needed because FastAPI handles one request at a time per
+# worker and we only mutate from request handlers.
+_RUNNING: dict[str, dict] = {}  # thread_id -> {"proc": Popen, "started": float, "title_hint": str}
+_MAX_RUNTIME_SEC = 300  # 5 min hard ceiling per turn
+
 
 # ---------------------------------------------------------------------------
 # Thread storage (JSON file — small, single-tenant, no need for a real DB)
@@ -301,20 +311,96 @@ def delete_thread(thread_id: str) -> None:
     _save_threads(new)
 
 
+def _reap_if_finished(thread_id: str, threads: list[dict], thread: dict) -> bool:
+    """If a background subprocess for this thread finished, do post-run
+    bookkeeping: capture session_id on the first turn, surface stderr on
+    failure, clean up the registry. Returns True if a process WAS running
+    and has now completed (so callers can refresh state)."""
+    job = _RUNNING.get(thread_id)
+    if not job:
+        return False
+    proc = job["proc"]
+    rc = proc.poll()
+    if rc is None:
+        # Still running. Enforce a hard ceiling so a hung subprocess can't
+        # block the thread forever.
+        if time.time() - job["started"] > _MAX_RUNTIME_SEC:
+            try:
+                proc.kill()
+            except Exception:
+                pass
+            _RUNNING.pop(thread_id, None)
+            print(f"[chat] killed runaway subprocess for thread={thread_id}")
+            return True
+        return False
+
+    # Finished — drain output and clean up.
+    stdout = ""
+    stderr = ""
+    try:
+        stdout, stderr = proc.communicate(timeout=1)
+    except Exception:
+        pass
+
+    if rc != 0:
+        tail = (stderr or stdout or "")[-600:]
+        print(f"[chat] subprocess exit={rc} thread={thread_id}: {tail!r}")
+
+    # First-turn session capture
+    if not thread.get("session_id"):
+        sid = _latest_session_for_source(f"dashboard:{thread_id}", job["started"])
+        if sid:
+            thread["session_id"] = sid
+            if thread.get("title") == "New conversation" and job.get("title_hint"):
+                thread["title"] = job["title_hint"][:60]
+            _save_threads(threads)
+
+    _RUNNING.pop(thread_id, None)
+    return True
+
+
 @router.get("/threads/{thread_id}/messages")
 def get_messages(thread_id: str) -> dict:
     threads = _load_threads()
     thread = next((t for t in threads if t["id"] == thread_id), None)
     if not thread:
         raise HTTPException(404, "Thread not found")
+
+    _reap_if_finished(thread_id, threads, thread)
+    job = _RUNNING.get(thread_id)
+    running = job is not None
+    messages = _thread_messages(thread.get("session_id"))
+    # While the session_id isn't pinned yet (first turn, hermes still
+    # booting), keep the user's message visible so the conversation
+    # doesn't flicker empty between polls.
+    if running and not messages and job and job.get("title_hint"):
+        messages = [{
+            "id": -1,
+            "role": "user",
+            "content": job["title_hint"],
+            "tool_calls": None,
+            "tool_name": None,
+            "tool_call_id": None,
+            "timestamp": job["started"],
+            "reasoning": None,
+        }]
     return {
         "thread": thread,
-        "messages": _thread_messages(thread.get("session_id")),
+        "messages": messages,
+        "running": running,
+        "elapsed_sec": (time.time() - job["started"]) if job else None,
     }
 
 
 @router.post("/threads/{thread_id}/messages")
 def send_message(thread_id: str, payload: MessageSend) -> dict:
+    """Spawn the hermes subprocess in the background and return immediately.
+
+    The client then polls GET /messages every ~1.5s to watch tool calls
+    and text appear in state.db as they happen. This trades a single
+    long-blocking request for short polling — but the user *sees* progress
+    instead of staring at dead air for 30-60 seconds while the agent
+    works through a multi-tool task."""
     threads = _load_threads()
     thread = next((t for t in threads if t["id"] == thread_id), None)
     if not thread:
@@ -325,20 +411,20 @@ def send_message(thread_id: str, payload: MessageSend) -> dict:
     if not agent:
         raise HTTPException(404, "Agent for this thread no longer exists")
 
+    # Refuse concurrent sends on the same thread — wait for the agent to
+    # finish its current turn first. Reap any zombie that already finished.
+    _reap_if_finished(thread_id, threads, thread)
+    if thread_id in _RUNNING:
+        raise HTTPException(409, "The agent is still responding to your last message.")
+
     source_tag = f"dashboard:{thread_id}"
     invocation_start = time.time()
 
-    # Compose toolset arg the same way start_agent does.
     toolsets_list = agent.get("toolsets") or (
         [agent.get("toolset")] if agent.get("toolset") and agent.get("toolset") != "default" else []
     )
     toolsets_arg = ",".join(t for t in toolsets_list if t and t != "default")
 
-    # `hermes chat` has no --system flag, so we inject context into the
-    # query text itself. On turn 1 we prepend the full agent identity +
-    # connected-apps briefing so the agent never wastes turns discovering
-    # what's already known. On turn N>1 the agent has the briefing in its
-    # session history and we just send the user's text.
     is_first_turn = not thread.get("session_id")
     if is_first_turn:
         toolkits = _connected_composio_toolkits() if "composio" in (toolsets_list or []) else []
@@ -359,7 +445,7 @@ def send_message(thread_id: str, payload: MessageSend) -> dict:
         "--quiet",
         "--source", source_tag,
         "--model", agent.get("model", "claude-sonnet-4-6"),
-        "--ignore-rules",  # don't auto-inject random AGENTS.md from the cwd
+        "--ignore-rules",
     ]
     if toolsets_arg:
         cmd.extend(["-t", toolsets_arg])
@@ -369,81 +455,42 @@ def send_message(thread_id: str, payload: MessageSend) -> dict:
     env = {**os.environ, "STAFFROOM_AGENT_ID": agent["id"]}
 
     try:
-        result = subprocess.run(
+        proc = subprocess.Popen(
             cmd,
             env=env,
             stdin=subprocess.DEVNULL,
-            capture_output=True,
+            stdout=subprocess.PIPE,
+            stderr=subprocess.PIPE,
             text=True,
-            timeout=300,  # 5 min hard cap per turn
         )
-    except subprocess.TimeoutExpired:
-        raise HTTPException(504, "Agent timed out after 5 minutes. Try a shorter message or check the logs.")
+    except Exception as exc:
+        raise HTTPException(500, f"Failed to spawn agent: {exc}")
 
-    if result.returncode != 0:
-        tail = (result.stderr or result.stdout or "")[-800:]
-        raise HTTPException(502, f"Agent run failed (exit {result.returncode}): {tail}")
+    _RUNNING[thread_id] = {
+        "proc": proc,
+        "started": invocation_start,
+        "title_hint": payload.content.strip(),
+    }
 
-    # First turn — find the session HERMÉS just created and pin it.
-    if not thread.get("session_id"):
-        sid = _latest_session_for_source(source_tag, invocation_start)
-        if sid:
-            thread["session_id"] = sid
-            if thread.get("title") == "New conversation":
-                thread["title"] = payload.content.strip()[:60]
-            _save_threads(threads)
-        else:
-            print(
-                f"[chat] no session created for thread={thread_id} source={source_tag}. "
-                f"stdout tail: {(result.stdout or '')[-400:]!r} | "
-                f"stderr tail: {(result.stderr or '')[-400:]!r}"
-            )
-
-    messages = _thread_messages(thread.get("session_id"))
-    # If the DB returned nothing (e.g. session not found, or hermes wrote to
-    # an unexpected place), at minimum surface what hermes printed on stdout
-    # so the conversation isn't a silent void. We synthesize a couple of
-    # message-shaped records the UI can render.
-    if not messages:
-        synth: list[dict] = [
-            {
-                "id": -1,
-                "role": "user",
-                "content": payload.content,
-                "tool_calls": None,
-                "tool_name": None,
-                "tool_call_id": None,
-                "timestamp": invocation_start,
-                "reasoning": None,
-            }
-        ]
-        if (result.stdout or "").strip():
-            synth.append({
-                "id": -2,
-                "role": "assistant",
-                "content": result.stdout.strip(),
-                "tool_calls": None,
-                "tool_name": None,
-                "tool_call_id": None,
-                "timestamp": time.time(),
-                "reasoning": None,
-            })
-        else:
-            synth.append({
-                "id": -2,
-                "role": "assistant",
-                "content": (
-                    "(The agent finished but didn't return any text. "
-                    "This usually means hermes is still installing its model "
-                    "client on first use — try again in a few seconds. "
-                    "Stderr tail in the bridge logs has details.)"
-                ),
-                "tool_calls": None,
-                "tool_name": None,
-                "tool_call_id": None,
-                "timestamp": time.time(),
-                "reasoning": None,
-            })
-        messages = synth
-
-    return {"thread": thread, "messages": messages}
+    # Return the current state immediately (no blocking). The client will
+    # poll for updates. We also synthesize an optimistic user message in
+    # case the session_id isn't pinned yet, so the UI shows something to
+    # anchor the conversation on while hermes boots.
+    existing = _thread_messages(thread.get("session_id"))
+    if not existing:
+        existing = [{
+            "id": -1,
+            "role": "user",
+            "content": payload.content,
+            "tool_calls": None,
+            "tool_name": None,
+            "tool_call_id": None,
+            "timestamp": invocation_start,
+            "reasoning": None,
+        }]
+    return {
+        "thread": thread,
+        "messages": existing,
+        "running": True,
+        "elapsed_sec": 0.0,
+    }
