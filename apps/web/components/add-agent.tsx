@@ -2,8 +2,8 @@
 
 import { useQuery } from "@tanstack/react-query";
 import { AlertTriangle, Check, Plus, X } from "lucide-react";
-import { useState } from "react";
-import { api, capabilities } from "@/lib/api";
+import { useMemo, useState } from "react";
+import { api, capabilities, composio } from "@/lib/api";
 
 export function AddAgentTile({ onCreated }: { onCreated: () => void }) {
   const [open, setOpen] = useState(false);
@@ -30,10 +30,30 @@ function AddAgentSheet({ onClose, onCreated }: { onClose: () => void; onCreated:
   const [model, setModel] = useState("anthropic/claude-sonnet-4.6");
   const [systemPrompt, setSystemPrompt] = useState("");
   const [toolsets, setToolsets] = useState<string[]>(["composio"]);
+  // Per-agent Composio scoping: which connected apps this agent can touch.
+  // Empty = all of them (legacy behaviour). Scoped = the agent's briefing
+  // and tool surface only mention the picked toolkits → cleaner reasoning,
+  // fewer wasted tokens on irrelevant integrations.
+  const [composioToolkits, setComposioToolkits] = useState<string[]>([]);
   const [busy, setBusy] = useState(false);
   const [err, setErr] = useState<string | null>(null);
   const capsQ = useQuery({ queryKey: ["capabilities"], queryFn: capabilities.list });
   const capMap = new Map((capsQ.data?.items ?? []).map((c) => [c.id, c]));
+
+  // Pull the operator's currently-connected Composio apps so the multi-
+  // select shows their real options, not the full 1000+ Composio catalogue.
+  const cstatus = useQuery({ queryKey: ["composio-status"], queryFn: composio.status });
+  const cconns = useQuery({
+    queryKey: ["composio-connections"],
+    queryFn: composio.connections,
+    enabled: cstatus.data?.configured === true,
+  });
+  const connectedSlugs = useMemo(() => {
+    const seen = new Set<string>();
+    (cconns.data?.items ?? []).forEach((c) => seen.add(c.toolkit));
+    return Array.from(seen).sort();
+  }, [cconns.data]);
+  const composioEnabled = toolsets.includes("composio");
 
   const TOOLSET_OPTIONS = [
     { id: "composio", label: "Composio (250+ apps via OAuth)" },
@@ -63,6 +83,8 @@ function AddAgentSheet({ onClose, onCreated }: { onClose: () => void; onCreated:
         model,
         system_prompt: systemPrompt,
         toolsets: toolsets.length ? toolsets : undefined,
+        composio_toolkits:
+          composioEnabled && composioToolkits.length ? composioToolkits : undefined,
       } as never);
       onCreated();
       onClose();
@@ -211,6 +233,46 @@ function AddAgentSheet({ onClose, onCreated }: { onClose: () => void; onCreated:
             </div>
           </div>
         </Field>
+
+        {composioEnabled && (
+          <Field label="Which connected apps can this agent touch?">
+            {connectedSlugs.length === 0 ? (
+              <div className="text-xs text-muted px-2 py-2 border border-dashed border-line rounded-lg">
+                No apps connected yet. Head to <strong>Connections</strong> to
+                wire up Gmail, Slack, Stripe and friends — then come back here
+                to scope this agent to a subset.
+              </div>
+            ) : (
+              <>
+                <div className="flex flex-col gap-1 -mt-0.5 max-h-48 overflow-y-auto pr-1">
+                  {connectedSlugs.map((slug) => (
+                    <label
+                      key={slug}
+                      className="flex items-center gap-2 text-sm cursor-pointer px-2 py-1 rounded hover:bg-black/[0.04] dark:hover:bg-white/[0.04]"
+                    >
+                      <input
+                        type="checkbox"
+                        checked={composioToolkits.includes(slug)}
+                        onChange={() => {
+                          setComposioToolkits((prev) =>
+                            prev.includes(slug)
+                              ? prev.filter((x) => x !== slug)
+                              : [...prev, slug],
+                          );
+                        }}
+                      />
+                      <span className="capitalize">{slug}</span>
+                    </label>
+                  ))}
+                </div>
+                <div className="text-[10px] text-muted mt-1">
+                  Empty = the agent can use any connected app. Picking a few
+                  keeps it focused (and trims token cost on every turn).
+                </div>
+              </>
+            )}
+          </Field>
+        )}
 
         {err && <div className="text-sm text-red-600">{err}</div>}
 

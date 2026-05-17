@@ -20,6 +20,11 @@ class AgentDef(BaseModel):
     system_prompt: str = ""
     toolset: str = "default"  # legacy single-string field, kept for back-compat
     toolsets: Optional[List[str]] = None  # new multi-select; preferred when set
+    # Composio scoping: which connected apps this agent can touch. Empty/null
+    # = all currently-connected apps (legacy behaviour). When set, the agent's
+    # briefing only mentions these toolkits, so it won't burn tokens loading
+    # the full Composio catalog into its reasoning context.
+    composio_toolkits: Optional[List[str]] = None
     enabled: bool = True
 
 
@@ -41,6 +46,7 @@ class AgentCreate(BaseModel):
     system_prompt: str = ""
     toolset: str = "default"
     toolsets: Optional[List[str]] = None
+    composio_toolkits: Optional[List[str]] = None
 
 
 class AgentPatch(BaseModel):
@@ -53,6 +59,7 @@ class AgentPatch(BaseModel):
     system_prompt: Optional[str] = None
     toolset: Optional[str] = None
     toolsets: Optional[List[str]] = None
+    composio_toolkits: Optional[List[str]] = None
     enabled: Optional[bool] = None
 
 

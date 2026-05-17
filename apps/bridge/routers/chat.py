@@ -144,6 +144,17 @@ def _connected_composio_toolkits() -> list[str]:
     return out
 
 
+def _agent_scoped_toolkits(agent: dict) -> list[str]:
+    """Intersect the agent's allow-list (if any) with the toolkits currently
+    connected at the Composio level. Empty allow-list = no restriction →
+    fall back to every connected toolkit (legacy behaviour)."""
+    connected = _connected_composio_toolkits()
+    allow = agent.get("composio_toolkits")
+    if not allow:
+        return connected
+    return [t for t in connected if t in allow]
+
+
 _TOOLKIT_NICE_NAMES = {
     "gmail": "Gmail", "googlecalendar": "Google Calendar", "googledrive": "Google Drive",
     "slack": "Slack", "notion": "Notion", "github": "GitHub", "linear": "Linear",
@@ -319,7 +330,7 @@ async def send_message(thread_id: str, payload: MessageSend) -> dict:
     toolsets_list = agent.get("toolsets") or (
         [agent.get("toolset")] if agent.get("toolset") and agent.get("toolset") != "default" else []
     )
-    toolkits = _connected_composio_toolkits() if "composio" in (toolsets_list or []) else []
+    toolkits = _agent_scoped_toolkits(agent) if "composio" in (toolsets_list or []) else []
     system_prompt = _compose_system_prompt(agent, toolkits)
 
     headers = {"Content-Type": "application/json"}

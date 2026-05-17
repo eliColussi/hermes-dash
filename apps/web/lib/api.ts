@@ -12,6 +12,7 @@ export interface Agent {
   system_prompt: string;
   toolset: string;
   toolsets: string[] | null;
+  composio_toolkits: string[] | null;
   enabled: boolean;
   status: AgentStatus;
   tasks_today: number;

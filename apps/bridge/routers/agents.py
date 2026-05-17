@@ -54,6 +54,7 @@ def create_agent(payload: AgentCreate) -> AgentView:
         "system_prompt": payload.system_prompt,
         "toolset": payload.toolset,
         "toolsets": payload.toolsets or None,
+        "composio_toolkits": payload.composio_toolkits or None,
         "enabled": True,
     }
     agents.append(new_agent)
