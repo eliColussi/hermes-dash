@@ -165,17 +165,34 @@ _TOOLKIT_NICE_NAMES = {
 }
 
 
+_AGENT_OPERATING_PRINCIPLES = (
+    "When the operator asks you to set up a recurring task or workflow: "
+    "FIRST propose a concrete plan — including the smallest possible data "
+    "schema, where you'll store it, and how you'll decide what to act on. "
+    "Prefer storing only what future runs need to make decisions (e.g. "
+    "sender email + a one-line context note, NOT full message histories or "
+    "raw API payloads). Briefly explain your plan and ask the operator to "
+    "confirm before executing. On every run thereafter, optimise for "
+    "token efficiency: read the slim data first, only fetch heavy payloads "
+    "(email bodies, file contents) when you've decided you actually need "
+    "them. Quality of result is non-negotiable; efficiency is how you "
+    "deliver that quality at the lowest possible cost to the operator."
+)
+
+
 def _compose_system_prompt(agent: dict, toolkits: list[str]) -> str:
-    """Minimal context — name, role, connected apps. Modern tool-calling
-    models don't need a 200-token primer on how to use tools; that just
-    bloats every turn and triggers reasoning passes the user doesn't want
-    for a simple "hey what's up"."""
+    """Minimal context — name, role, connected apps, plus a one-paragraph
+    operating principle that turns the agent into a thoughtful collaborator
+    rather than a literal prompt-follower. The principle is the bridge
+    between 'operator writes a one-line task description' and 'agent sets
+    itself up with the right data structures and asks for confirmation'."""
     base = (agent.get("system_prompt") or agent.get("description") or "").strip()
     name = agent.get("name") or "the agent"
     parts = [f"You are {name}." + (f" {base}" if base else "")]
     if toolkits:
         nice = ", ".join(_TOOLKIT_NICE_NAMES.get(t, t.title()) for t in toolkits)
         parts.append(f"Connected apps available via tools: {nice}.")
+    parts.append(_AGENT_OPERATING_PRINCIPLES)
     return " ".join(parts)
 
 
