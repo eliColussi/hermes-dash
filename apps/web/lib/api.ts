@@ -380,6 +380,24 @@ export const chat = {
     ),
 };
 
+export interface RecentRun {
+  id: string;
+  source: string | null;
+  model: string | null;
+  started_at: number;
+  ended_at: number | null;
+  message_count: number;
+  tool_call_count: number;
+  cost_usd: number | null;
+  title: string | null;
+  outcome: string | null;
+  agent_id: string | null;
+}
+export const runs = {
+  recent: (limit = 12) =>
+    req<{ items: RecentRun[] }>(`/api/runs/recent?limit=${limit}`),
+};
+
 export interface Capability {
   id: string;
   ready: boolean;

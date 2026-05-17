@@ -6,9 +6,10 @@ import {
   CheckCircle2,
   Circle,
   PartyPopper,
+  Sparkles,
 } from "lucide-react";
 import Link from "next/link";
-import { api, audit, composio, schedules, webhooks } from "@/lib/api";
+import { Agent, RecentRun, api, audit, composio, runs, schedules, webhooks } from "@/lib/api";
 
 interface Step {
   key: string;
@@ -36,6 +37,11 @@ export default function HomePage() {
   const sched = useQuery({ queryKey: ["schedules"], queryFn: schedules.list });
   const hooks = useQuery({ queryKey: ["webhooks"], queryFn: webhooks.list });
   const today = useQuery({ queryKey: ["audit-today"], queryFn: () => audit.list({ limit: 5 }) });
+  const recentRuns = useQuery({
+    queryKey: ["recent-runs"],
+    queryFn: () => runs.recent(8),
+    refetchInterval: 30_000,
+  });
 
   const customAgentExists = (agents.data ?? []).some(
     (a) => !["analyst", "boss", "captain"].includes(a.id),
@@ -128,7 +134,13 @@ export default function HomePage() {
             </div>
           </div>
         </div>
-      ) : (
+      ) : null}
+
+      {(recentRuns.data?.items.length ?? 0) > 0 && (
+        <RecentWins runs={recentRuns.data!.items} agents={agents.data ?? []} />
+      )}
+
+      {!allDone && (
         <>
           <div className="mt-10">
             <div className="flex items-center gap-3 mb-1">
@@ -186,6 +198,78 @@ export default function HomePage() {
       )}
     </div>
   );
+}
+
+// Recent autonomous wins — the "look what your agents did for you" feed.
+// One card per recent run with the agent's closing report (truncated). This
+// is the surface that makes "$3 today bought you replies to 12 emails" feel
+// like a deal instead of a number on a screen.
+function RecentWins({ runs, agents }: { runs: RecentRun[]; agents: Agent[] }) {
+  const agentMap = new Map(agents.map((a) => [a.id, a]));
+  return (
+    <div className="card p-5 mt-8">
+      <div className="flex items-center justify-between mb-4">
+        <div className="flex items-center gap-2">
+          <Sparkles className="w-4 h-4 text-accent" />
+          <div className="font-medium">Recent wins</div>
+        </div>
+        <Link href="/activity" className="text-xs text-muted hover:text-ink">
+          See all activity →
+        </Link>
+      </div>
+      <div className="space-y-3">
+        {runs.map((r) => {
+          const agent = r.agent_id ? agentMap.get(r.agent_id) : undefined;
+          return (
+            <div
+              key={r.id}
+              className="flex items-start gap-3 pb-3 border-b border-line/40 last:border-0 last:pb-0"
+            >
+              <div className="w-8 h-8 rounded-full bg-[var(--bg)] border border-line flex items-center justify-center text-base shrink-0 mt-0.5">
+                {agent?.icon ?? "🤖"}
+              </div>
+              <div className="flex-1 min-w-0">
+                <div className="flex items-center gap-2 flex-wrap mb-1">
+                  <span className="text-sm font-medium">{agent?.name ?? "Agent"}</span>
+                  <span className="text-[10px] text-muted">
+                    {fmtRelative(r.started_at)}
+                  </span>
+                  {r.source && r.source !== "cli" && (
+                    <span className="chip text-[10px]">{fmtSource(r.source)}</span>
+                  )}
+                  {r.tool_call_count > 0 && (
+                    <span className="text-[10px] text-muted">
+                      {r.tool_call_count} action{r.tool_call_count === 1 ? "" : "s"}
+                    </span>
+                  )}
+                </div>
+                <div className="text-sm text-ink-2 whitespace-pre-wrap line-clamp-3">
+                  {r.outcome}
+                </div>
+              </div>
+            </div>
+          );
+        })}
+      </div>
+    </div>
+  );
+}
+
+function fmtRelative(epochSec: number): string {
+  const diff = Date.now() / 1000 - epochSec;
+  if (diff < 60) return "just now";
+  if (diff < 3600) return `${Math.floor(diff / 60)}m ago`;
+  if (diff < 86400) return `${Math.floor(diff / 3600)}h ago`;
+  return `${Math.floor(diff / 86400)}d ago`;
+}
+
+function fmtSource(s: string): string {
+  if (s.startsWith("cron")) return "Scheduled";
+  if (s.startsWith("webhook")) return "Triggered";
+  if (s.startsWith("telegram")) return "Telegram";
+  if (s.startsWith("slack")) return "Slack";
+  if (s.startsWith("discord")) return "Discord";
+  return s;
 }
 
 function Stat({
