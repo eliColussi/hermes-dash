@@ -3,7 +3,7 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { Pause, Play, Plus, Trash2, X, Zap } from "lucide-react";
 import { useState } from "react";
-import { Schedule, schedules } from "@/lib/api";
+import { Schedule, api, schedules } from "@/lib/api";
 
 // Friendly schedule recipes the operator can pick by default
 const RECIPES = [
@@ -167,15 +167,24 @@ function NewScheduleSheet({
   const [prompt, setPrompt] = useState("");
   const [schedule, setSchedule] = useState("0 9 * * 1-5");
   const [deliver, setDeliver] = useState("local");
+  const [agentId, setAgentId] = useState<string>("");
   const [busy, setBusy] = useState(false);
   const [err, setErr] = useState<string | null>(null);
+
+  const agentsQ = useQuery({ queryKey: ["agents"], queryFn: api.agents });
 
   async function submit(e: React.FormEvent) {
     e.preventDefault();
     setBusy(true);
     setErr(null);
     try {
-      await schedules.create({ name, prompt, schedule, deliver });
+      await schedules.create({
+        name,
+        prompt,
+        schedule,
+        deliver,
+        agent_id: agentId || undefined,
+      });
       onCreated();
       onClose();
     } catch (e: unknown) {
@@ -246,6 +255,26 @@ function NewScheduleSheet({
           />
           <span className="text-[10px] text-muted">
             Accepts cron (0 9 * * 1-5), interval (every 30m), one-shot (30m), or ISO timestamp.
+          </span>
+        </div>
+
+        <div className="flex flex-col gap-1.5">
+          <span className="text-xs font-medium text-muted">Which agent owns this? (optional)</span>
+          <select
+            value={agentId}
+            onChange={(e) => setAgentId(e.target.value)}
+            className="px-3 py-2 rounded-lg border border-line bg-[var(--bg)] text-sm"
+          >
+            <option value="">— No specific owner —</option>
+            {(agentsQ.data ?? []).map((a) => (
+              <option key={a.id} value={a.id}>
+                {a.icon} {a.name}
+              </option>
+            ))}
+          </select>
+          <span className="text-[10px] text-muted">
+            Pausing that agent on the Agents page will also pause this
+            schedule. Leave empty for an unowned, always-on job.
           </span>
         </div>
 

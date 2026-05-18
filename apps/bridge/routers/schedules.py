@@ -12,7 +12,7 @@ from typing import Any, Dict, List, Optional
 from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel, Field
 
-from .. import auth
+from .. import agent_links, auth
 from ..config import VENDOR_HERMES
 
 # HERMÉS modules live in vendor/hermes-agent/ and are imported lazily so the
@@ -56,6 +56,13 @@ class ScheduleCreate(BaseModel):
     )
     model: Optional[str] = None
     skills: Optional[List[str]] = None
+    agent_id: Optional[str] = Field(
+        None,
+        description=(
+            "If set, the schedule is linked to this Staff Room agent. "
+            "Pausing the agent will pause this schedule and vice versa."
+        ),
+    )
 
 
 class SchedulePatch(BaseModel):
@@ -120,6 +127,8 @@ def create_schedule(payload: ScheduleCreate) -> dict:
         )
     except Exception as exc:
         raise HTTPException(400, f"Failed to create schedule: {exc}")
+    if payload.agent_id and job.get("id"):
+        agent_links.link_schedule(payload.agent_id, job["id"])
     return _slim(job)
 
 
@@ -154,3 +163,4 @@ def delete_schedule(job_id: str) -> None:
     ok = hermes.remove_job(job_id)
     if not ok:
         raise HTTPException(404, "Schedule not found")
+    agent_links.unlink_schedule(job_id)

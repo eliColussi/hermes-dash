@@ -210,6 +210,7 @@ export const schedules = {
     deliver?: string;
     model?: string;
     skills?: string[];
+    agent_id?: string;
   }) =>
     req<Schedule>("/api/schedules", { method: "POST", body: JSON.stringify(body) }),
   patch: (id: string, body: Partial<{ name: string; prompt: string; schedule: string; repeat: number; deliver: string; model: string; enabled: boolean }>) =>

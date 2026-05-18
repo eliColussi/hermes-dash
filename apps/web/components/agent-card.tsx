@@ -10,6 +10,17 @@ export function AgentCard({ agent, onChange }: { agent: Agent; onChange: () => v
   const [menu, setMenu] = useState(false);
 
   async function toggle() {
+    // When pausing, warn the operator that this also stops the agent's
+    // schedules and triggers — that's the whole point of the button (so
+    // a misbehaving agent stops burning money) but they should know.
+    if (agent.status !== "down") {
+      const ok = confirm(
+        `Pause ${agent.name}? Any schedules or triggers linked to this ` +
+        `agent will stop firing too. Nothing is deleted — clicking Start ` +
+        `again restores everything.`,
+      );
+      if (!ok) return;
+    }
     setBusy(true);
     try {
       if (agent.status === "down") await api.startAgent(agent.id);
@@ -103,7 +114,7 @@ export function AgentCard({ agent, onChange }: { agent: Agent; onChange: () => v
             </>
           ) : (
             <>
-              <Square className="w-3 h-3" /> Stop
+              <Square className="w-3 h-3" /> Pause
             </>
           )}
         </button>

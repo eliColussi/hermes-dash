@@ -20,7 +20,7 @@ from typing import List, Optional
 from fastapi import APIRouter, Depends, HTTPException, Request
 from pydantic import BaseModel, Field
 
-from .. import auth, hermes_client as hc
+from .. import agent_links, auth, hermes_client as hc
 from ..config import HERMES_HOME
 
 router = APIRouter(
@@ -206,6 +206,8 @@ def create_webhook(payload: WebhookCreate, request: Request) -> dict:
         route["deliver_extra"] = {"chat_id": payload.deliver_chat_id}
     subs[name] = route
     _save_subs(subs)
+    if payload.agent_id:
+        agent_links.link_webhook(payload.agent_id, name)
 
     base = _public_base_url(request)
     return {
@@ -227,3 +229,39 @@ def delete_webhook(name: str) -> None:
         raise HTTPException(404, "Subscription not found")
     del subs[name]
     _save_subs(subs)
+    agent_links.unlink_webhook(name)
+
+
+class WebhookEnableToggle(BaseModel):
+    enabled: bool
+
+
+@router.patch("/{name}")
+def toggle_webhook(name: str, payload: WebhookEnableToggle) -> dict:
+    """Soft-pause a trigger without losing its config or URL.
+
+    We park the disabled route under a `paused:` prefix so HERMÉS' webhook
+    adapter no longer matches incoming POSTs, then restore the original
+    name when re-enabled. This way the URL the operator pasted into Stripe
+    keeps working the moment they un-pause."""
+    name = name.strip().lower()
+    subs = _load_subs()
+    paused_name = f"__paused__{name}"
+    if payload.enabled:
+        # Resume: move config back to original key.
+        if paused_name in subs and name not in subs:
+            subs[name] = subs.pop(paused_name)
+            _save_subs(subs)
+            return {"name": name, "enabled": True}
+        if name in subs:
+            return {"name": name, "enabled": True}
+        raise HTTPException(404, "Trigger not found")
+    else:
+        # Pause: move config out of the active key.
+        if name in subs:
+            subs[paused_name] = subs.pop(name)
+            _save_subs(subs)
+            return {"name": name, "enabled": False}
+        if paused_name in subs:
+            return {"name": name, "enabled": False}
+        raise HTTPException(404, "Trigger not found")
