@@ -141,6 +141,32 @@ if [ -z "${API_SERVER_KEY:-}" ]; then
   export API_SERVER_KEY="$(cat "$API_SERVER_KEY_FILE")"
 fi
 
+# Session cookie signing secret for the dashboard login. Persists on the
+# data volume so existing sessions survive redeploys. Never shown to users.
+SESSION_SECRET_FILE="${STAFFROOM_HOME:-/data/staffroom}/session-secret"
+if [ -z "${STAFFROOM_SESSION_SECRET:-}" ]; then
+  if [ ! -s "$SESSION_SECRET_FILE" ]; then
+    python3 -c "import secrets; print(secrets.token_urlsafe(48))" > "$SESSION_SECRET_FILE"
+    chmod 600 "$SESSION_SECRET_FILE"
+  fi
+  export STAFFROOM_SESSION_SECRET="$(cat "$SESSION_SECRET_FILE")"
+fi
+
+# Admin credentials. Without these, the dashboard refuses logins (the
+# operator must ask their agency to set them in Railway). Default username
+# is "admin" if not specified.
+export STAFFROOM_ADMIN_USER="${STAFFROOM_ADMIN_USER:-admin}"
+if [ -z "${STAFFROOM_ADMIN_PASSWORD:-}" ]; then
+  echo ""
+  echo "========================================================================"
+  echo "⚠️  STAFFROOM_ADMIN_PASSWORD not set — dashboard logins will fail."
+  echo "========================================================================"
+  echo "   Set STAFFROOM_ADMIN_PASSWORD in Railway env vars."
+  echo "   Default username is 'admin' (override with STAFFROOM_ADMIN_USER)."
+  echo "========================================================================"
+  echo ""
+fi
+
 # Bridge runs on a fixed internal port; not exposed externally.
 echo "[start] launching bridge on 127.0.0.1:8787"
 cd /app

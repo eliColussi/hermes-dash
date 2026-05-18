@@ -68,6 +68,13 @@ async function req<T>(path: string, init?: RequestInit): Promise<T> {
     cache: "no-store",
     ...init,
   });
+  // Session expired → bounce to login. The middleware would also handle this
+  // on a page navigation, but a fetch in the background needs explicit
+  // handling so the user isn't stuck looking at a broken page.
+  if (r.status === 401 && typeof window !== "undefined" && !window.location.pathname.startsWith("/login")) {
+    window.location.href = `/login?next=${encodeURIComponent(window.location.pathname)}`;
+    throw new Error("Session expired");
+  }
   if (!r.ok) {
     // Surface the bridge's actual error body so 502s aren't silent — the
     // server already includes a stderr tail in detail, we just need to
