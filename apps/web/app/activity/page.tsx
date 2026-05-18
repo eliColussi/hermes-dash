@@ -73,8 +73,8 @@ function SessionsTable() {
 
   return (
     <>
-      <div className="card overflow-hidden">
-        <table className="w-full text-sm">
+      <div className="card overflow-hidden overflow-x-auto">
+        <table className="w-full min-w-[720px] text-sm">
           <thead className="bg-[var(--bg)] text-muted text-xs uppercase tracking-wider">
             <tr>
               <th className="text-left px-4 py-3">Title</th>

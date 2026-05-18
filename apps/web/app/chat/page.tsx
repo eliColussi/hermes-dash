@@ -1,7 +1,7 @@
 "use client";
 
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { ChevronDown, MessageSquare, Plus, Send, Trash2 } from "lucide-react";
+import { ChevronDown, ChevronLeft, MessageSquare, Plus, Send, Trash2 } from "lucide-react";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { Agent, ChatMessage, ChatThread, api, chat } from "@/lib/api";
 
@@ -47,9 +47,13 @@ export default function ChatPage() {
   }, [agents]);
 
   return (
-    <div className="flex h-[calc(100vh-6rem)] -m-8 border-t border-line">
+    <div className="flex h-[calc(100vh-6rem)] -m-4 md:-m-8 border-t border-line">
       {/* Left rail: thread list */}
-      <div className="w-[280px] shrink-0 border-r border-line bg-surface flex flex-col">
+      <div
+        className={`md:w-[280px] md:flex-shrink-0 border-r border-line bg-surface flex-col ${
+          activeThreadId ? "hidden md:flex" : "flex w-full"
+        }`}
+      >
         <div className="p-3 border-b border-line">
           <div className="relative">
             <button
@@ -115,14 +119,19 @@ export default function ChatPage() {
         </div>
       </div>
 
-      {/* Right pane: messages */}
-      <div className="flex-1 flex flex-col min-w-0">
+      {/* Right pane: messages. On mobile only one column shows at a time. */}
+      <div
+        className={`flex-1 flex-col min-w-0 ${
+          activeThreadId ? "flex" : "hidden md:flex"
+        }`}
+      >
         {activeThreadId ? (
           <ChatPane
             key={activeThreadId}
             threadId={activeThreadId}
             agent={agentLookup.get(threads.find((t) => t.id === activeThreadId)?.agent_id ?? "")}
             onDelete={() => removeMut.mutate(activeThreadId)}
+            onBackMobile={() => setActiveThreadId(null)}
           />
         ) : (
           <EmptyState />
@@ -152,10 +161,12 @@ function ChatPane({
   threadId,
   agent,
   onDelete,
+  onBackMobile,
 }: {
   threadId: string;
   agent: Agent | undefined;
   onDelete: () => void;
+  onBackMobile?: () => void;
 }) {
   const qc = useQueryClient();
   // Poll every 1.5s while the agent is still working. The bridge fires the
@@ -273,6 +284,16 @@ function ChatPane({
       {/* Header */}
       <div className="px-5 py-3 border-b border-line flex items-center justify-between bg-surface">
         <div className="flex items-center gap-3 min-w-0">
+          {onBackMobile && (
+            <button
+              onClick={onBackMobile}
+              className="md:hidden p-1 hover:bg-surface-3 rounded text-muted -ml-1"
+              aria-label="Back to conversations"
+              title="Back"
+            >
+              <ChevronLeft className="w-5 h-5" />
+            </button>
+          )}
           <div className="w-9 h-9 rounded-full bg-[var(--bg)] border border-line flex items-center justify-center text-lg shrink-0">
             {agent?.icon ?? "🤖"}
           </div>

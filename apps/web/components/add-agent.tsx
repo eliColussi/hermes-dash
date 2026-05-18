@@ -100,7 +100,7 @@ function AddAgentSheet({ onClose, onCreated }: { onClose: () => void; onCreated:
       <form
         onSubmit={submit}
         onClick={(e) => e.stopPropagation()}
-        className="w-[480px] h-full bg-[var(--surface)] border-l border-line p-6 flex flex-col gap-4 overflow-y-auto"
+        className="w-full md:w-[480px] h-full bg-[var(--surface)] border-l border-line p-5 md:p-6 flex flex-col gap-4 overflow-y-auto"
       >
         <div className="flex items-center justify-between">
           <h2 className="text-lg font-semibold">Add Agent</h2>

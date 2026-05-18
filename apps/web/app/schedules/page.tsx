@@ -64,7 +64,8 @@ export default function SchedulesPage() {
           </div>
         )}
         {q.data && q.data.items.length > 0 && (
-          <table className="w-full text-sm">
+          <div className="overflow-x-auto">
+          <table className="w-full min-w-[640px] text-sm">
             <thead className="bg-[var(--bg)] text-muted text-xs uppercase tracking-wider">
               <tr>
                 <th className="text-left px-4 py-3">Name / Prompt</th>
@@ -89,6 +90,7 @@ export default function SchedulesPage() {
               ))}
             </tbody>
           </table>
+          </div>
         )}
       </div>
 
@@ -199,7 +201,7 @@ function NewScheduleSheet({
       <form
         onSubmit={submit}
         onClick={(e) => e.stopPropagation()}
-        className="w-[500px] h-full bg-[var(--surface)] border-l border-line p-6 flex flex-col gap-4 overflow-y-auto"
+        className="w-full md:w-[500px] h-full bg-[var(--surface)] border-l border-line p-5 md:p-6 flex flex-col gap-4 overflow-y-auto"
       >
         <div className="flex items-center justify-between">
           <h2 className="text-lg font-semibold">New schedule</h2>

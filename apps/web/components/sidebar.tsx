@@ -33,11 +33,26 @@ const NAV = [
   { href: "/analytics", label: "Usage", icon: BarChart3 },
 ];
 
-export function Sidebar() {
+export function Sidebar({
+  mobileOpen = false,
+  onCloseMobile,
+}: {
+  mobileOpen?: boolean;
+  onCloseMobile?: () => void;
+} = {}) {
   const pathname = usePathname();
 
   return (
-    <aside className="w-[260px] shrink-0 border-r border-line bg-surface flex flex-col">
+    <aside
+      className={cn(
+        "w-[260px] shrink-0 border-r border-line bg-surface flex flex-col",
+        // On mobile, the sidebar slides in from the left as an overlay so
+        // the dashboard remains usable on phones. On md+ it's a regular
+        // column in the flex layout (existing behaviour, unchanged).
+        "fixed inset-y-0 left-0 z-40 transform transition-transform md:relative md:translate-x-0",
+        mobileOpen ? "translate-x-0 shadow-2xl" : "-translate-x-full md:translate-x-0",
+      )}
+    >
       <div className="px-5 pt-6 pb-4">
         <div className="font-display text-[19px] leading-none tracking-tight text-ink">
           Staff Room
@@ -65,7 +80,11 @@ export function Sidebar() {
             const Icon = item.icon;
             return (
               <li key={item.href}>
-                <Link href={item.href} className={cn("nav-item", active && "active")}>
+                <Link
+                  href={item.href}
+                  onClick={onCloseMobile}
+                  className={cn("nav-item", active && "active")}
+                >
                   <Icon className="w-4 h-4" />
                   <span>{item.label}</span>
                 </Link>
@@ -78,6 +97,7 @@ export function Sidebar() {
       <div className="px-3 pb-5 pt-3 border-t border-line">
         <Link
           href="/settings"
+          onClick={onCloseMobile}
           className={cn("nav-item", pathname === "/settings" && "active")}
         >
           <Settings className="w-4 h-4" />

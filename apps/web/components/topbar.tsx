@@ -1,10 +1,16 @@
 "use client";
 
-import { LogOut, Sun, Moon } from "lucide-react";
+import { LogOut, Menu, Sun, Moon } from "lucide-react";
 import { useRouter } from "next/navigation";
 import { useEffect, useState } from "react";
 
-export function Topbar({ children }: { children?: React.ReactNode }) {
+export function Topbar({
+  children,
+  onOpenMobileNav,
+}: {
+  children?: React.ReactNode;
+  onOpenMobileNav?: () => void;
+}) {
   const router = useRouter();
   const [dark, setDark] = useState(false);
 
@@ -34,7 +40,17 @@ export function Topbar({ children }: { children?: React.ReactNode }) {
   }
 
   return (
-    <div className="flex items-center justify-between border-b border-line bg-surface px-6 py-3">
+    <div className="flex items-center justify-between border-b border-line bg-surface px-4 md:px-6 py-3">
+      {/* Hamburger — phone/tablet only */}
+      {onOpenMobileNav && (
+        <button
+          onClick={onOpenMobileNav}
+          className="p-2 rounded-lg text-ink-2 hover:bg-surface-3 transition md:hidden mr-2"
+          aria-label="Open navigation"
+        >
+          <Menu className="w-5 h-5" />
+        </button>
+      )}
       <div className="flex-1">{children}</div>
       <div className="flex items-center gap-2">
         <button

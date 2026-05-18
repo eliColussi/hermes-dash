@@ -248,7 +248,7 @@ function NewTriggerWizard({
     <div className="fixed inset-0 z-50 bg-black/40 backdrop-blur-sm flex justify-end" onClick={onClose}>
       <div
         onClick={(e) => e.stopPropagation()}
-        className="w-[600px] h-full bg-surface border-l border-line flex flex-col"
+        className="w-full md:w-[600px] h-full bg-surface border-l border-line flex flex-col"
       >
         {/* Header */}
         <div className="flex items-center justify-between p-5 border-b border-line">
