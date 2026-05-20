@@ -5,6 +5,7 @@ import { Check, Minus } from "lucide-react";
 import { api } from "@/lib/api";
 import { ChannelSetupSection } from "@/components/channel-setup";
 import { ComposioPanel } from "@/components/composio-panel";
+import { PendingPairingsBanner } from "@/components/pending-pairings";
 
 export default function ConnectionsPage() {
   const q = useQuery({ queryKey: ["integrations"], queryFn: api.integrations });
@@ -17,6 +18,8 @@ export default function ConnectionsPage() {
       <p className="text-sm text-muted mt-1 mb-6">
         Apps your agents can read, write, and act on.
       </p>
+
+      <PendingPairingsBanner />
 
       <ChannelSetupSection />
 

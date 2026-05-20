@@ -451,3 +451,47 @@ def set_channel_agent(payload: ChannelAgentPayload) -> dict:
         "agent_name": chosen.get("name"),
         "note": "Restart the messaging service for the change to take effect.",
     }
+
+
+# ---------------------------------------------------------------------------
+# Bot pairing approvals — HERMÉS default-denies messages from unknown users
+# on every platform; the user gets a pairing code in their first DM, the
+# operator approves it from the dashboard. We talk to the same PairingManager
+# the gateway uses (file-backed under HERMES_HOME/platforms/pairing), so
+# approvals take effect immediately with no restart.
+# ---------------------------------------------------------------------------
+
+def _pairing_manager():
+    """Import lazily — pulls in the vendored HERMÉS package, which is heavy."""
+    from gateway.pairing import PairingManager
+    return PairingManager()
+
+
+@router.get("/pairing/pending")
+def list_pending_pairings() -> dict:
+    """Return everyone currently waiting for the operator to approve them on
+    a bot. Empty list when there are none — the UI hides the banner."""
+    try:
+        items = _pairing_manager().list_pending() or []
+    except Exception:
+        # Vendored HERMÉS may be unavailable in dev — surface as empty.
+        items = []
+    return {"items": items, "count": len(items)}
+
+
+class PairingApprovePayload(BaseModel):
+    platform: str
+    code: str
+
+
+@router.post("/pairing/approve")
+def approve_pairing(payload: PairingApprovePayload) -> dict:
+    """Approve a single pending pairing code. The user can then DM the bot."""
+    pm = _pairing_manager()
+    result = pm.approve_code(payload.platform, payload.code.strip().upper())
+    if not result:
+        raise HTTPException(
+            400,
+            "That code is invalid or expired. Ask the user to message the bot again to get a fresh one.",
+        )
+    return {"approved": True, **result}

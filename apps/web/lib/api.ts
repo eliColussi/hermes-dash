@@ -1,5 +1,14 @@
 export type AgentStatus = "healthy" | "stale" | "down";
 
+export interface PairingPending {
+  platform: string;
+  code: string;
+  user_id: string;
+  user_name: string;
+  created_at?: string;
+  expires_at?: string;
+}
+
 export interface Agent {
   id: string;
   name: string;
@@ -161,6 +170,15 @@ export const api = {
     req<{ agent_id: string; agent_name: string; note: string }>(
       "/api/integrations/channel-agent",
       { method: "PUT", body: JSON.stringify({ agent_id }) },
+    ),
+  listPendingPairings: () =>
+    req<{ items: PairingPending[]; count: number }>(
+      "/api/integrations/pairing/pending",
+    ),
+  approvePairing: (platform: string, code: string) =>
+    req<{ approved: boolean; user_id: string; user_name: string }>(
+      "/api/integrations/pairing/approve",
+      { method: "POST", body: JSON.stringify({ platform, code }) },
     ),
   settings: () => req<SettingsView>("/api/settings"),
   mcpConfig: () =>
