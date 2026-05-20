@@ -3,6 +3,7 @@
 import { useQuery } from "@tanstack/react-query";
 import { Check, Minus } from "lucide-react";
 import { api } from "@/lib/api";
+import { ChannelSetupSection } from "@/components/channel-setup";
 import { ComposioPanel } from "@/components/composio-panel";
 
 export default function ConnectionsPage() {
@@ -16,6 +17,8 @@ export default function ConnectionsPage() {
       <p className="text-sm text-muted mt-1 mb-6">
         Apps your agents can read, write, and act on.
       </p>
+
+      <ChannelSetupSection />
 
       <ComposioPanel />
 
