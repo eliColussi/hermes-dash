@@ -158,32 +158,31 @@ function AddAgentSheet({ onClose, onCreated }: { onClose: () => void; onCreated:
 
         <Field label="Model">
           <select value={model} onChange={(e) => setModel(e.target.value)} className="input">
-            <optgroup label="Recommended (default)">
-              <option value="anthropic/claude-sonnet-4.6">Claude Sonnet 4.6 — the right balance for almost any agent</option>
-              <option value="anthropic/claude-opus-4.7">Claude Opus 4.7 — the smartest option, worth it for hard problems</option>
+            <optgroup label="Recommended — balance of intelligence + tool calling">
+              <option value="anthropic/claude-sonnet-4.6">Claude Sonnet 4.6 — best all-rounder for agentic work</option>
+              <option value="anthropic/claude-opus-4.7">Claude Opus 4.7 — smartest available; worth it for hard problems</option>
               <option value="openai/gpt-5">GPT-5 — strongest closed competitor, great at structured tasks</option>
+              <option value="google/gemini-2.5-pro">Gemini 2.5 Pro — long context (1M+), strong tool use</option>
             </optgroup>
-            <optgroup label="Faster, cheaper (when speed/cost actually matters)">
-              <option value="anthropic/claude-haiku-4.5">Claude Haiku 4.5 — fast, cheap, decent at tools</option>
-              <option value="google/gemini-2.5-flash">Gemini 2.5 Flash — fastest, very cheap</option>
-              <option value="openai/gpt-5-mini">GPT-5 mini — cheap GPT-5 family</option>
-            </optgroup>
-            <optgroup label="Frontier (massive context, deepest reasoning)">
-              <option value="google/gemini-2.5-pro">Gemini 2.5 Pro — long context, strong tools</option>
-              <option value="x-ai/grok-4">Grok 4 — strong tool calling, fast</option>
-            </optgroup>
-            <optgroup label="Sleeper picks (cheap + great tool calling)">
-              <option value="minimax/minimax-m2">MiniMax M2 — excellent agentic orchestration, very cheap</option>
-              <option value="deepseek/deepseek-v3.2">DeepSeek V3.2 — strong tools, lowest cost per turn</option>
-              <option value="qwen/qwen3-max">Qwen3 Max — strong multi-step tool chains</option>
+            <optgroup label="Cost-effective + great tool calling (the smart-money picks)">
+              <option value="minimax/minimax-m2">MiniMax M2 — flagship agentic model, excellent tool chains, very cheap</option>
+              <option value="minimax/minimax-m1">MiniMax M1 — older sibling, still strong, even cheaper</option>
+              <option value="anthropic/claude-haiku-4.5">Claude Haiku 4.5 — fast Anthropic tier, decent at tools</option>
+              <option value="google/gemini-2.5-flash">Gemini 2.5 Flash — fastest, very cheap, multimodal</option>
+              <option value="openai/gpt-5-mini">GPT-5 mini — cheap GPT-5 family, solid function calling</option>
               <option value="moonshotai/kimi-k2">Kimi K2 — agentic specialist, good at long workflows</option>
+            </optgroup>
+            <optgroup label="Open-weights / lowest cost">
+              <option value="deepseek/deepseek-v3.2">DeepSeek V3.2 — strong tools, lowest cost per turn</option>
+              <option value="qwen/qwen3-max">Qwen3 Max — multi-step tool chains, very cheap</option>
               <option value="mistralai/mistral-large-2411">Mistral Large 2 — EU-hosted, solid function calling</option>
             </optgroup>
-            <optgroup label="Reasoning (slower, costs more — only when needed)">
-              <option value="openai/gpt-5-pro">GPT-5 Pro — deep reasoning</option>
+            <optgroup label="Deep reasoning (slower, costs more — only when needed)">
+              <option value="openai/gpt-5-pro">GPT-5 Pro — deep reasoning over many steps</option>
               <option value="deepseek/deepseek-r1">DeepSeek R1 — open-weights reasoning</option>
+              <option value="x-ai/grok-4">Grok 4 — strong tool calling, fast</option>
             </optgroup>
-            <optgroup label="Direct provider (skips OpenRouter)">
+            <optgroup label="Direct provider (skips OpenRouter — needs the matching API key)">
               <option value="claude-haiku-4-5">Claude Haiku 4.5 (Anthropic direct)</option>
               <option value="claude-sonnet-4-6">Claude Sonnet 4.6 (Anthropic direct)</option>
               <option value="claude-opus-4-7">Claude Opus 4.7 (Anthropic direct)</option>
