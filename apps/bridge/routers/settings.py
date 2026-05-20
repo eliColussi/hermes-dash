@@ -10,7 +10,7 @@ from pathlib import Path
 from fastapi import APIRouter, Depends
 from fastapi.responses import StreamingResponse
 
-from .. import auth
+from .. import auth, persistence
 from ..config import HERMES_HOME, STAFFROOM_HOME
 
 router = APIRouter(prefix="/api/settings", tags=["settings"], dependencies=[Depends(auth.require_token)])
@@ -24,6 +24,7 @@ def get_settings() -> dict:
         "token_present": not auth.is_disabled(),
         "token_fingerprint": auth.token_fingerprint(),
         "auth_disabled": auth.is_disabled(),
+        "persistence": persistence.status(),
         "env": {
             "STAFFROOM_AUTH_TOKEN": "set" if os.environ.get("STAFFROOM_AUTH_TOKEN") else "unset",
         },

@@ -45,21 +45,52 @@ def _key_file() -> Path:
     return STAFFROOM_HOME / KEY_FILENAME
 
 
+def _decode_key(b64: str) -> bytes:
+    """Decode a urlsafe-base64 key and require exactly 32 bytes after decode.
+    No silent truncation or zero-padding — a short key is operator error."""
+    raw = base64.urlsafe_b64decode(b64.strip() + "==")
+    if len(raw) != 32:
+        raise ValueError(
+            f"Vault key must decode to exactly 32 bytes, got {len(raw)}. "
+            "Generate one with: python -c 'import secrets,base64; "
+            "print(base64.urlsafe_b64encode(secrets.token_bytes(32)).decode().rstrip(\"=\"))'"
+        )
+    return raw
+
+
 def _load_or_create_key() -> bytes:
-    """Return the 32-byte secretbox key. Generate one if neither source has it."""
+    """Return the 32-byte secretbox key.
+
+    Priority order:
+      1. $STAFFROOM_SECRETS_KEY env var (preferred; key never touches the volume)
+      2. Existing $STAFFROOM_HOME/secrets.key (backwards-compat for deploys
+         that already have a vault.enc + disk key from prior versions)
+      3. Refuse to mint a fresh disk key unless the operator opts in via
+         STAFFROOM_VAULT_ALLOW_DISK_KEY=yes. This prevents new production
+         deploys from silently creating a key on the same volume as the
+         vault, which would make at-rest encryption pointless.
+    """
     env_key = os.environ.get("STAFFROOM_SECRETS_KEY")
     if env_key:
-        try:
-            return base64.urlsafe_b64decode(env_key + "==")[:32].ljust(32, b"\0")
-        except Exception:
-            logger.warning("STAFFROOM_SECRETS_KEY is not valid urlsafe-base64; ignoring")
+        return _decode_key(env_key)
 
     kf = _key_file()
     if kf.exists():
         try:
-            return base64.urlsafe_b64decode(kf.read_text().strip() + "==")[:32].ljust(32, b"\0")
-        except Exception:
-            logger.warning("secrets.key is corrupt; regenerating")
+            return _decode_key(kf.read_text())
+        except ValueError as exc:
+            logger.warning("secrets.key on disk is invalid: %s", exc)
+            # Fall through — operator must fix or re-mint.
+
+    if os.environ.get("STAFFROOM_VAULT_ALLOW_DISK_KEY") != "yes":
+        raise RuntimeError(
+            "Vault key is not configured. Set STAFFROOM_SECRETS_KEY in your "
+            "environment (recommended) — generate one with: python -c "
+            "'import secrets,base64; print(base64.urlsafe_b64encode("
+            "secrets.token_bytes(32)).decode().rstrip(\"=\"))'. For local "
+            "development only, set STAFFROOM_VAULT_ALLOW_DISK_KEY=yes to "
+            "mint a key on disk."
+        )
 
     raw = _secrets.token_bytes(32)
     kf.parent.mkdir(parents=True, exist_ok=True)
@@ -68,6 +99,10 @@ def _load_or_create_key() -> bytes:
         os.chmod(kf, stat.S_IRUSR | stat.S_IWUSR)
     except OSError:
         pass
+    logger.warning(
+        "Generated vault key on disk at %s. For production, move it to "
+        "STAFFROOM_SECRETS_KEY env var and delete the file.", kf
+    )
     return raw
 
 

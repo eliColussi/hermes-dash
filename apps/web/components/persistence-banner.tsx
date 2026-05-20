@@ -3,7 +3,7 @@
 import { AlertTriangle } from "lucide-react";
 import { useEffect, useState } from "react";
 
-interface HealthResponse {
+interface SettingsResponse {
   persistence?: { persistent: boolean | null };
 }
 
@@ -22,14 +22,14 @@ export function PersistenceBanner() {
     let cancelled = false;
     async function check() {
       try {
-        const [hRes, cRes] = await Promise.all([
-          fetch("/api/health", { cache: "no-store" }),
+        const [sRes, cRes] = await Promise.all([
+          fetch("/api/settings", { cache: "no-store" }),
           fetch("/api/capabilities", { cache: "no-store" }),
         ]);
         if (cancelled) return;
-        if (hRes.ok) {
-          const h: HealthResponse = await hRes.json();
-          setEphemeral(h.persistence?.persistent === false);
+        if (sRes.ok) {
+          const s: SettingsResponse = await sRes.json();
+          setEphemeral(s.persistence?.persistent === false);
         }
         if (cRes.ok) {
           const c: CapabilitiesResponse = await cRes.json();

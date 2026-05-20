@@ -164,6 +164,7 @@ export interface SettingsView {
   token_present: boolean;
   token_fingerprint: string;
   auth_disabled: boolean;
+  persistence?: { persistent: boolean | null };
   env: Record<string, string>;
 }
 

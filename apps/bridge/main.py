@@ -58,7 +58,10 @@ def _startup() -> None:
     if auth.is_disabled():
         print("⚠️  STAFFROOM_AUTH_DISABLED=1 — running without auth (dev only)")
     else:
-        print(f"🔐 Bridge token: {auth.current_token()}")
+        # Never log the token itself — Railway captures stdout permanently.
+        # Print only the fingerprint so an operator can confirm "the bridge
+        # is using the same token I set in env" without leaking the value.
+        print(f"🔐 Bridge token configured (ends in …{auth.token_fingerprint()})")
         print("   Set STAFFROOM_AUTH_TOKEN in the web env to authenticate.")
     # Decrypt vault and export to os.environ so spawned HERMÉS processes
     # inherit secrets without plaintext .env on disk.
@@ -69,8 +72,7 @@ def _startup() -> None:
 
 @app.get("/api/health")
 def health() -> dict:
-    return {
-        "status": "ok",
-        "auth_disabled": auth.is_disabled(),
-        "persistence": persistence.status(),
-    }
+    # Intentionally minimal — this is the only unauthenticated endpoint
+    # on the bridge. Don't leak auth state or filesystem paths to anyone
+    # who can reach the container. Authed callers get detail via /api/settings.
+    return {"status": "ok"}
