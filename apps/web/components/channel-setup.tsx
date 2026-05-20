@@ -116,6 +116,107 @@ const CHANNELS: ChannelDef[] = [
       },
     ],
   },
+  {
+    id: "mattermost",
+    label: "Mattermost",
+    icon: "🛰️",
+    tagline: "Open-source Slack alternative. Self-hosted teams love it.",
+    estMinutes: 5,
+    steps: [
+      { text: "Open your Mattermost server in the browser and sign in as an admin (or as the user the bot should act as)." },
+      { text: 'Click your profile picture (top-left) → "Profile" → "Security" tab.' },
+      { text: 'Scroll to "Personal Access Tokens". If you don\'t see it, ask your Mattermost admin to enable Personal Access Tokens in System Console → Integrations.' },
+      { text: 'Click "Create Token", give it a name like "Staff Room agent", and copy the long token that appears (it\'s shown only once).' },
+      { text: "Paste the server URL and token below and click Save." },
+    ],
+    fields: [
+      {
+        key: "MATTERMOST_URL",
+        label: "Server URL",
+        placeholder: "https://mm.example.com",
+        help: "No trailing slash. Just the base URL of your Mattermost.",
+      },
+      {
+        key: "MATTERMOST_TOKEN",
+        label: "Personal Access Token",
+        placeholder: "yntyk3...",
+        help: "From your profile → Security → Personal Access Tokens.",
+      },
+    ],
+  },
+  {
+    id: "email",
+    label: "Email",
+    icon: "✉️",
+    tagline: "Your agent reads incoming mail and replies. Works with Gmail, Outlook, or any IMAP server.",
+    estMinutes: 5,
+    steps: [
+      {
+        text: "Pick your provider below — we'll fill in the host/port fields for you.",
+      },
+      {
+        text: "You need an APP PASSWORD, not your normal login password. For Gmail: enable 2FA, then go to myaccount.google.com → Security → App passwords. For Outlook / Microsoft: account.microsoft.com → Security → App passwords (needs 2FA on).",
+        link: { label: "Gmail app passwords", href: "https://myaccount.google.com/apppasswords" },
+      },
+      {
+        text: "Generate the password — it'll be a 16-character string like 'abcd efgh ijkl mnop'. Copy it.",
+      },
+      { text: "Paste your email address and the app password below. Click Save — we'll verify IMAP login before persisting." },
+    ],
+    fields: [
+      // The Email walkthrough adds a provider-preset chooser above these
+      // fields via a custom render hook below — see EmailPresetRow.
+      {
+        key: "EMAIL_ADDRESS",
+        label: "Email address",
+        placeholder: "agent@yourcompany.com",
+        help: "The mailbox the agent reads from and sends from.",
+      },
+      {
+        key: "EMAIL_PASSWORD",
+        label: "App password",
+        placeholder: "16-character string from your provider",
+        help: "Provider-specific. Not your normal login password.",
+      },
+      {
+        key: "EMAIL_IMAP_HOST",
+        label: "IMAP host",
+        placeholder: "imap.gmail.com",
+      },
+      {
+        key: "EMAIL_IMAP_PORT",
+        label: "IMAP port",
+        placeholder: "993",
+      },
+      {
+        key: "EMAIL_SMTP_HOST",
+        label: "SMTP host",
+        placeholder: "smtp.gmail.com",
+      },
+      {
+        key: "EMAIL_SMTP_PORT",
+        label: "SMTP port",
+        placeholder: "587",
+      },
+    ],
+  },
+];
+
+// Provider presets for the Email walkthrough — clicking one prefills the
+// IMAP/SMTP fields. Operators who use a custom server just type their own.
+const EMAIL_PRESETS = [
+  { id: "gmail", label: "Gmail / Google Workspace",
+    fill: { EMAIL_IMAP_HOST: "imap.gmail.com", EMAIL_IMAP_PORT: "993",
+            EMAIL_SMTP_HOST: "smtp.gmail.com", EMAIL_SMTP_PORT: "587" } },
+  { id: "outlook", label: "Outlook / Microsoft 365",
+    fill: { EMAIL_IMAP_HOST: "outlook.office365.com", EMAIL_IMAP_PORT: "993",
+            EMAIL_SMTP_HOST: "smtp.office365.com", EMAIL_SMTP_PORT: "587" } },
+  { id: "yahoo", label: "Yahoo Mail",
+    fill: { EMAIL_IMAP_HOST: "imap.mail.yahoo.com", EMAIL_IMAP_PORT: "993",
+            EMAIL_SMTP_HOST: "smtp.mail.yahoo.com", EMAIL_SMTP_PORT: "587" } },
+  { id: "icloud", label: "iCloud Mail",
+    fill: { EMAIL_IMAP_HOST: "imap.mail.me.com", EMAIL_IMAP_PORT: "993",
+            EMAIL_SMTP_HOST: "smtp.mail.me.com", EMAIL_SMTP_PORT: "587" } },
 ];
 
 // Platforms HERMÉS supports but that need real-world verification we can't
@@ -123,9 +224,11 @@ const CHANNELS: ChannelDef[] = [
 // they exist but route the conversation back to their agency.
 const ADVANCED = [
   { label: "WhatsApp Business", note: "Requires Meta Business verification (1–3 days)." },
-  { label: "SMS (Twilio)", note: "Needs a Twilio account + a verified phone number." },
-  { label: "Email (IMAP/SMTP)", note: "App-specific passwords vary by provider." },
-  { label: "Matrix / Signal / iMessage", note: "Possible — but pairing is per-account and not 5-step." },
+  { label: "SMS (Twilio)", note: "Needs a Twilio account + a verified phone number + a public webhook URL." },
+  { label: "Microsoft Teams", note: "Requires Azure AD app registration with admin consent." },
+  { label: "Matrix", note: "Available — but homeserver-specific config makes a generic walkthrough misleading. Ask your team." },
+  { label: "Signal", note: "Needs a signal-cli-rest-api server and a dedicated phone number." },
+  { label: "iMessage (BlueBubbles)", note: "Requires a Mac running the BlueBubbles server." },
 ];
 
 export function ChannelSetupSection() {
@@ -139,7 +242,7 @@ export function ChannelSetupSection() {
         Pick a chat app. We&apos;ll walk you through getting a bot token in
         plain English — no developer terminology, no surprise steps.
       </p>
-      <div className="grid grid-cols-1 sm:grid-cols-3 gap-2">
+      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-2">
         {CHANNELS.map((c) => (
           <button
             key={c.id}
@@ -269,23 +372,49 @@ function ChannelWalkthroughModal({
           </ol>
 
           <div className="space-y-3 pt-2 border-t border-line">
-            {channel.fields.map((f) => (
-              <label key={f.key} className="flex flex-col gap-1">
-                <span className="text-xs font-medium text-muted">{f.label}</span>
-                <input
-                  type="password"
-                  value={values[f.key]}
-                  onChange={(e) =>
-                    setValues((prev) => ({ ...prev, [f.key]: e.target.value }))
-                  }
-                  placeholder={f.placeholder}
-                  className="px-3 py-2 rounded-lg border border-line bg-[var(--bg)] text-sm font-mono"
-                  autoComplete="off"
-                  spellCheck={false}
-                />
-                {f.help && <span className="text-[10px] text-muted">{f.help}</span>}
-              </label>
-            ))}
+            {channel.id === "email" && (
+              <div className="flex flex-col gap-1.5 pb-1">
+                <span className="text-xs font-medium text-muted">
+                  Provider (prefills the host/port fields below)
+                </span>
+                <div className="flex flex-wrap gap-1.5">
+                  {EMAIL_PRESETS.map((p) => (
+                    <button
+                      key={p.id}
+                      type="button"
+                      onClick={() =>
+                        setValues((prev) => ({ ...prev, ...p.fill }))
+                      }
+                      className="px-2.5 py-1 text-[11px] border border-line rounded-full hover:bg-accent-soft hover:border-accent/40"
+                    >
+                      {p.label}
+                    </button>
+                  ))}
+                </div>
+              </div>
+            )}
+            {channel.fields.map((f) => {
+              // URL / host / port / address fields aren't secrets — show
+              // them as plain text so operators can verify what they typed.
+              const isSecret = /TOKEN$|PASSWORD$/.test(f.key);
+              return (
+                <label key={f.key} className="flex flex-col gap-1">
+                  <span className="text-xs font-medium text-muted">{f.label}</span>
+                  <input
+                    type={isSecret ? "password" : "text"}
+                    value={values[f.key]}
+                    onChange={(e) =>
+                      setValues((prev) => ({ ...prev, [f.key]: e.target.value }))
+                    }
+                    placeholder={f.placeholder}
+                    className="px-3 py-2 rounded-lg border border-line bg-[var(--bg)] text-sm font-mono"
+                    autoComplete="off"
+                    spellCheck={false}
+                  />
+                  {f.help && <span className="text-[10px] text-muted">{f.help}</span>}
+                </label>
+              );
+            })}
             {save.error && (
               <div className="text-xs text-red-600">
                 {(save.error as Error).message}

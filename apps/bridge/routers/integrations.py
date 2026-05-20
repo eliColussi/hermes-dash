@@ -82,6 +82,34 @@ PROVIDERS = {
             {"key": "DISCORD_BOT_TOKEN", "label": "Bot Token", "secret": True, "help": ""},
         ],
     },
+    "mattermost": {
+        "label": "Mattermost",
+        "icon": "🛰️",
+        "fields": [
+            {"key": "MATTERMOST_URL", "label": "Server URL", "secret": False,
+             "help": "e.g. https://mm.example.com (no trailing slash)"},
+            {"key": "MATTERMOST_TOKEN", "label": "Bot Token", "secret": True,
+             "help": "Personal-access token or bot account token."},
+        ],
+    },
+    "email": {
+        "label": "Email (IMAP/SMTP)",
+        "icon": "✉️",
+        "fields": [
+            {"key": "EMAIL_ADDRESS", "label": "Email address", "secret": False,
+             "help": "The mailbox the agent reads & sends from."},
+            {"key": "EMAIL_PASSWORD", "label": "App password", "secret": True,
+             "help": "Provider-specific app password (not your login password)."},
+            {"key": "EMAIL_IMAP_HOST", "label": "IMAP host", "secret": False,
+             "help": "e.g. imap.gmail.com"},
+            {"key": "EMAIL_IMAP_PORT", "label": "IMAP port", "secret": False,
+             "help": "Usually 993."},
+            {"key": "EMAIL_SMTP_HOST", "label": "SMTP host", "secret": False,
+             "help": "e.g. smtp.gmail.com"},
+            {"key": "EMAIL_SMTP_PORT", "label": "SMTP port", "secret": False,
+             "help": "Usually 587."},
+        ],
+    },
 }
 
 
@@ -240,6 +268,50 @@ def _verify_channel_token(provider: str, values: dict[str, str]) -> Optional[str
             if r.status_code == 200:
                 return None
             return "Discord rejected this bot token. Generate a fresh one from the Bot tab (the old one stops working after Reset Token)."
+        if provider == "mattermost":
+            url = values.get("MATTERMOST_URL", "").rstrip("/")
+            tok = values.get("MATTERMOST_TOKEN", "")
+            if not url or not tok:
+                return None
+            r = httpx.get(
+                f"{url}/api/v4/users/me",
+                headers={"Authorization": f"Bearer {tok}"},
+                timeout=8.0,
+            )
+            if r.status_code == 200:
+                return None
+            if r.status_code == 401:
+                return "Mattermost rejected this token. Generate a new Personal Access Token in your profile settings."
+            return f"Couldn't reach Mattermost at {url} (HTTP {r.status_code}). Double-check the server URL."
+        if provider == "email":
+            # Only verify if all the IMAP fields are supplied — partial updates
+            # (e.g. just rotating the password) are common and we shouldn't
+            # demand the operator re-paste everything.
+            host = values.get("EMAIL_IMAP_HOST", "")
+            port_str = values.get("EMAIL_IMAP_PORT", "")
+            addr = values.get("EMAIL_ADDRESS", "")
+            pw = values.get("EMAIL_PASSWORD", "")
+            if not (host and port_str and addr and pw):
+                return None
+            try:
+                port = int(port_str)
+            except ValueError:
+                return "IMAP port must be a number (usually 993)."
+            import imaplib
+            try:
+                m = imaplib.IMAP4_SSL(host, port, timeout=10)
+                try:
+                    m.login(addr, pw)
+                finally:
+                    try:
+                        m.logout()
+                    except Exception:
+                        pass
+            except imaplib.IMAP4.error:
+                return "IMAP login failed. For Gmail / Outlook, you need an APP PASSWORD — not your normal account password. See the help text below the field."
+            except OSError as exc:
+                return f"Couldn't reach IMAP server {host}:{port} ({exc.__class__.__name__}). Check host and port."
+            return None
     except httpx.RequestError:
         # Network blip — don't block save on our connectivity issue.
         return None
