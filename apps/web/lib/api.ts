@@ -180,6 +180,11 @@ export const api = {
       "/api/integrations/pairing/approve",
       { method: "POST", body: JSON.stringify({ platform, code }) },
     ),
+  dismissPairing: (platform: string, code: string) =>
+    req<{ dismissed: boolean }>(
+      "/api/integrations/pairing/dismiss",
+      { method: "POST", body: JSON.stringify({ platform, code }) },
+    ),
   settings: () => req<SettingsView>("/api/settings"),
   mcpConfig: () =>
     req<{ claude_code: unknown; instructions: string }>(

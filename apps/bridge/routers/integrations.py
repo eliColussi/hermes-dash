@@ -512,3 +512,34 @@ def approve_pairing(payload: PairingApprovePayload) -> dict:
             "That code is invalid or expired. Ask the user to message the bot again to get a fresh one.",
         )
     return {"approved": True, **result}
+
+
+@router.post("/pairing/dismiss")
+def dismiss_pairing(payload: PairingApprovePayload) -> dict:
+    """Drop a pending pairing code without approving it. Useful when an old
+    code lingers after the same user has already been approved via a newer
+    code — HERMÉS keeps prior pending entries until they expire (1hr TTL),
+    which clutters the banner.
+
+    We modify the pending JSON directly because PairingStore exposes only
+    clear_pending(platform) which would wipe everyone, not just one code.
+    """
+    import json
+    try:
+        pm = _pairing_manager()
+    except ImportError as exc:
+        raise HTTPException(503, f"HERMÉS gateway package not available ({exc}).")
+    path = pm._pending_path(payload.platform)
+    if not path.exists():
+        raise HTTPException(404, "No pending requests for that platform.")
+    with pm._lock:
+        try:
+            data = json.loads(path.read_text(encoding="utf-8"))
+        except (json.JSONDecodeError, OSError):
+            data = {}
+        code = payload.code.strip().upper()
+        if code not in data:
+            raise HTTPException(404, "That code isn't in the pending list (it may have already expired or been approved).")
+        data.pop(code)
+        path.write_text(json.dumps(data), encoding="utf-8")
+    return {"dismissed": True, "platform": payload.platform, "code": code}
