@@ -2,9 +2,7 @@
 from __future__ import annotations
 
 import io
-import json
 import os
-import secrets
 import tarfile
 import time
 from pathlib import Path
@@ -13,21 +11,21 @@ from fastapi import APIRouter, Depends
 from fastapi.responses import StreamingResponse
 
 from .. import auth
-from ..config import HERMES_BIN, HERMES_HOME, STAFFROOM_HOME
+from ..config import HERMES_HOME, STAFFROOM_HOME
 
 router = APIRouter(prefix="/api/settings", tags=["settings"], dependencies=[Depends(auth.require_token)])
 
 
 @router.get("")
 def get_settings() -> dict:
+    # We never return the bearer token from a GET. The operator sees it once
+    # on rotation and is expected to record it somewhere safe.
     return {
-        "token": auth.current_token() if not auth.is_disabled() else None,
+        "token_present": not auth.is_disabled(),
+        "token_fingerprint": auth.token_fingerprint(),
         "auth_disabled": auth.is_disabled(),
-        "hermes_home": str(HERMES_HOME),
-        "staffroom_home": str(STAFFROOM_HOME),
         "env": {
             "STAFFROOM_AUTH_TOKEN": "set" if os.environ.get("STAFFROOM_AUTH_TOKEN") else "unset",
-            "STAFFROOM_AUTH_DISABLED": os.environ.get("STAFFROOM_AUTH_DISABLED", "0"),
         },
     }
 
@@ -47,13 +45,15 @@ def mcp_config() -> dict:
     locally we resolve via HERMES_BIN. The operator copies this snippet into
     their own Claude Code config on their workstation.
     """
+    # Return only an abstract command name — never the absolute server-side
+    # binary path or HERMES_HOME. The operator's own `which hermes` resolves
+    # the path on their workstation; disclosing ours is recon for an attacker.
     return {
         "claude_code": {
             "mcpServers": {
                 "hermes": {
-                    "command": HERMES_BIN,
+                    "command": "hermes",
                     "args": ["mcp", "serve"],
-                    "env": {"HERMES_HOME": str(HERMES_HOME)},
                 }
             }
         },
@@ -61,10 +61,9 @@ def mcp_config() -> dict:
             "Save to ~/.claude/claude_desktop_config.json (macOS) or "
             "%APPDATA%\\Claude\\claude_desktop_config.json (Windows). "
             "If you already have an `mcpServers` block, merge the `hermes` "
-            "entry into it. Restart Claude Code after editing. The bridge "
-            "binary path assumes your HERMÉS install — if it differs from "
-            "the value above, edit the `command` field to point at your "
-            "own `hermes` executable (`which hermes`)."
+            "entry into it. Restart Claude Code after editing. The `command` "
+            "value above assumes `hermes` is on your PATH — if `which hermes` "
+            "returns a path on your machine, paste that path in instead."
         ),
     }
 
@@ -77,6 +76,20 @@ _BACKUP_EXCLUDE = {
     "checkpoints", # internal
 }
 
+# Credential files that MUST NOT appear in a downloadable backup. An authed
+# operator may legitimately want a backup of agent config / state / audit log,
+# but the .env, vault key, session secret, bearer token, and api-server key
+# would let anyone with the tarball impersonate the entire deploy. Matched on
+# basename so this catches the file regardless of nesting.
+_CREDENTIAL_BASENAMES = {
+    ".env",
+    "secrets.key",
+    "vault.key",
+    "session-secret",
+    "token",
+    "api-server-key",
+}
+
 
 def _tar_dir(tf: tarfile.TarFile, src: Path, arc_prefix: str) -> None:
     if not src.exists():
@@ -84,6 +97,8 @@ def _tar_dir(tf: tarfile.TarFile, src: Path, arc_prefix: str) -> None:
     for path in src.rglob("*"):
         rel = path.relative_to(src)
         if rel.parts and rel.parts[0] in _BACKUP_EXCLUDE:
+            continue
+        if path.name in _CREDENTIAL_BASENAMES:
             continue
         try:
             tf.add(path, arcname=f"{arc_prefix}/{rel}", recursive=False)
@@ -95,9 +110,11 @@ def _tar_dir(tf: tarfile.TarFile, src: Path, arc_prefix: str) -> None:
 def backup() -> StreamingResponse:
     """Stream a .tar.gz of HERMES_HOME + STAFFROOM_HOME state.
 
-    Excludes caches/logs/checkpoints/sessions for size. Includes state.db,
-    config.yaml, .env, kanban.db, webhook_subscriptions.json, agents.yaml,
-    audit/, runtime/, skills/.
+    Excludes caches/logs/checkpoints/sessions for size, and ALL credential
+    files (.env, secrets.key, session-secret, token, api-server-key) for
+    safety — those must be re-supplied via Railway env vars on restore.
+    Includes state.db, config.yaml, kanban.db, webhook_subscriptions.json,
+    agents.yaml, audit/, runtime/, skills/.
     """
     buf = io.BytesIO()
     with tarfile.open(fileobj=buf, mode="w:gz") as tf:
@@ -124,13 +141,17 @@ def backup() -> StreamingResponse:
 
 @router.post("/rotate-token")
 def rotate_token() -> dict:
-    """Rotate the persisted token. Requires a restart to take effect for clients."""
+    """Rotate the bearer token. The new value is returned EXACTLY ONCE — copy
+    it now; no GET endpoint will return it again. The old token stops being
+    accepted immediately (in-process)."""
     if auth.is_disabled():
         return {"rotated": False, "reason": "auth disabled"}
-    new_token = secrets.token_urlsafe(32)
-    auth.TOKEN_FILE.write_text(new_token)
-    try:
-        os.chmod(auth.TOKEN_FILE, 0o600)
-    except OSError:
-        pass
-    return {"rotated": True, "token": new_token, "note": "Restart the bridge for the new token to take effect."}
+    new_token = auth.rotate_token()
+    return {
+        "rotated": True,
+        "token": new_token,
+        "note": (
+            "Copy this token now — it will not be shown again. Update "
+            "STAFFROOM_AUTH_TOKEN in Railway and any external integrations."
+        ),
+    }

@@ -1,17 +1,23 @@
 "use client";
 
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { Copy, RefreshCw, Eye, EyeOff } from "lucide-react";
+import { Copy, RefreshCw } from "lucide-react";
 import { useState } from "react";
 import { api } from "@/lib/api";
 
 export default function SettingsPage() {
   const qc = useQueryClient();
   const q = useQuery({ queryKey: ["settings"], queryFn: api.settings });
-  const [revealed, setRevealed] = useState(false);
+  // Holds the freshly rotated token. We show it exactly once, then clear it
+  // on navigation. The token is never persisted to query cache.
+  const [freshToken, setFreshToken] = useState<string | null>(null);
+  const [copied, setCopied] = useState(false);
   const rotate = useMutation({
     mutationFn: api.rotateToken,
-    onSuccess: () => qc.invalidateQueries({ queryKey: ["settings"] }),
+    onSuccess: (data) => {
+      if (data?.token) setFreshToken(data.token);
+      qc.invalidateQueries({ queryKey: ["settings"] });
+    },
   });
 
   const s = q.data;
@@ -31,29 +37,22 @@ export default function SettingsPage() {
           <>
             <div className="flex items-center gap-2">
               <code className="flex-1 px-3 py-2 rounded-lg border border-line bg-[var(--bg)] font-mono text-xs break-all">
-                {s?.token
-                  ? revealed
-                    ? s.token
-                    : s.token.slice(0, 6) + "•".repeat(20) + s.token.slice(-4)
+                {s?.token_present
+                  ? "•".repeat(40) + (s.token_fingerprint || "")
                   : "—"}
               </code>
               <button
-                onClick={() => setRevealed((r) => !r)}
-                className="p-2 border border-line rounded-lg"
-                title={revealed ? "Hide" : "Reveal"}
-              >
-                {revealed ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
-              </button>
-              <button
-                onClick={() => s?.token && navigator.clipboard.writeText(s.token)}
-                className="p-2 border border-line rounded-lg"
-                title="Copy"
-              >
-                <Copy className="w-4 h-4" />
-              </button>
-              <button
                 disabled={rotate.isPending}
-                onClick={() => rotate.mutate()}
+                onClick={() => {
+                  if (
+                    confirm(
+                      "Rotate the access key now? The old key will stop working immediately. " +
+                        "Any external integrations using it will need to be updated.",
+                    )
+                  ) {
+                    rotate.mutate();
+                  }
+                }}
                 className="p-2 border border-line rounded-lg"
                 title="Rotate"
               >
@@ -61,20 +60,43 @@ export default function SettingsPage() {
               </button>
             </div>
             <div className="text-xs text-muted mt-2">
-              The web app reads this from <code>STAFFROOM_AUTH_TOKEN</code> on the server side.
-              After rotating, update the env var and restart the web service.
+              For security, the full key is never returned by the API after creation.
+              Only the last 4 characters are shown above. Rotate to generate a new one.
             </div>
-            {rotate.data?.note && (
-              <div className="text-xs text-orange-600 mt-2">{rotate.data.note}</div>
+            {freshToken && (
+              <div className="mt-3 p-3 rounded-lg border border-orange-300 bg-orange-50 dark:bg-orange-950/30">
+                <div className="text-xs font-medium text-orange-700 dark:text-orange-400 mb-2">
+                  New key — copy now, will not be shown again
+                </div>
+                <div className="flex items-center gap-2">
+                  <code className="flex-1 px-2 py-1.5 rounded border border-orange-300 bg-white dark:bg-black/30 font-mono text-xs break-all">
+                    {freshToken}
+                  </code>
+                  <button
+                    onClick={() => {
+                      navigator.clipboard.writeText(freshToken);
+                      setCopied(true);
+                      setTimeout(() => setCopied(false), 1500);
+                    }}
+                    className="p-2 border border-orange-300 rounded-lg"
+                    title="Copy"
+                  >
+                    <Copy className="w-4 h-4" />
+                  </button>
+                  <button
+                    onClick={() => setFreshToken(null)}
+                    className="px-2 py-1 text-xs border border-orange-300 rounded-lg"
+                  >
+                    {copied ? "Copied — dismiss" : "I've saved it"}
+                  </button>
+                </div>
+                <div className="text-[11px] text-orange-700 dark:text-orange-400 mt-2">
+                  {rotate.data?.note}
+                </div>
+              </div>
             )}
           </>
         )}
-      </div>
-
-      <div className="card p-5 mb-4">
-        <div className="text-sm font-medium mb-3">Paths</div>
-        <Row label="HERMÉS home" value={s?.hermes_home ?? "—"} />
-        <Row label="Staff Room home" value={s?.staffroom_home ?? "—"} />
       </div>
 
       <div className="card p-5 mb-4">
@@ -121,9 +143,10 @@ function BackupCard() {
       <p className="text-xs text-muted mb-3">
         Downloads a .tar.gz of your HERMÉS state + Staff Room config —
         agents.yaml, state.db, kanban.db, webhook subscriptions, audit log,
-        skills directory, .env. Run this before upgrading HERMÉS or moving
-        to a new Railway service. Excludes rotating logs and trajectory
-        dumps (recoverable).
+        skills directory. Run this before upgrading HERMÉS or moving to a
+        new Railway service. Excludes rotating logs, trajectory dumps, and
+        all credential files (.env, vault key, session secret, access key)
+        — those must be re-supplied via Railway env vars on restore.
       </p>
       <button
         disabled={busy}

@@ -161,10 +161,9 @@ export const api = {
 };
 
 export interface SettingsView {
-  token: string | null;
+  token_present: boolean;
+  token_fingerprint: string;
   auth_disabled: boolean;
-  hermes_home: string;
-  staffroom_home: string;
   env: Record<string, string>;
 }
 

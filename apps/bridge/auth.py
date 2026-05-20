@@ -23,6 +23,17 @@ _PUBLIC_PATHS = {"/api/health"}
 
 def _load_or_create_token() -> str:
     if os.environ.get("STAFFROOM_AUTH_DISABLED") == "1":
+        # Refuse to disable auth unless the operator explicitly acknowledges
+        # the risk. Prevents a single env-var typo from exposing the whole
+        # bridge. The acknowledgement var is intentionally verbose.
+        ack = os.environ.get("STAFFROOM_I_UNDERSTAND_AUTH_DISABLED_IS_DEV_ONLY")
+        if ack != "yes":
+            raise RuntimeError(
+                "STAFFROOM_AUTH_DISABLED=1 is set but "
+                "STAFFROOM_I_UNDERSTAND_AUTH_DISABLED_IS_DEV_ONLY=yes is not. "
+                "Refusing to start with auth disabled. Remove "
+                "STAFFROOM_AUTH_DISABLED for production deploys."
+            )
         return ""
     if (env_token := os.environ.get("STAFFROOM_AUTH_TOKEN")):
         return env_token
@@ -47,8 +58,33 @@ def current_token() -> str:
     return _TOKEN
 
 
+def token_fingerprint() -> str:
+    """Last 4 chars of the token. Safe to surface in /api/settings without
+    leaking the credential itself. Empty string when auth is disabled."""
+    if not _TOKEN:
+        return ""
+    return _TOKEN[-4:]
+
+
 def is_disabled() -> bool:
     return _TOKEN == ""
+
+
+def rotate_token() -> str:
+    """Mint a new token, persist it, and update the in-memory value so the
+    old token stops being accepted immediately. Returns the new token. The
+    caller is responsible for surfacing it exactly once to the operator —
+    we never return it again from any GET endpoint."""
+    global _TOKEN
+    new_token = secrets.token_urlsafe(32)
+    ensure_dirs()
+    TOKEN_FILE.write_text(new_token)
+    try:
+        os.chmod(TOKEN_FILE, 0o600)
+    except OSError:
+        pass
+    _TOKEN = new_token
+    return new_token
 
 
 def require_token(authorization: str | None = Header(default=None)) -> None:
