@@ -4,6 +4,7 @@ import { MoreHorizontal, Play, Square, Trash2 } from "lucide-react";
 import { useState } from "react";
 import { Agent, api } from "@/lib/api";
 import { cn } from "@/lib/cn";
+import { EditAgentButton } from "@/components/add-agent";
 
 export function AgentCard({ agent, onChange }: { agent: Agent; onChange: () => void }) {
   const [busy, setBusy] = useState(false);
@@ -52,12 +53,15 @@ export function AgentCard({ agent, onChange }: { agent: Agent; onChange: () => v
             <div className="text-xs text-muted">{agent.slug}</div>
           </div>
         </div>
-        <button
-          className="p-1 rounded hover:bg-black/5 dark:hover:bg-white/10"
-          onClick={() => setMenu((m) => !m)}
-        >
-          <MoreHorizontal className="w-4 h-4" />
-        </button>
+        <div className="flex items-center gap-1">
+          <EditAgentButton agent={agent} onSaved={onChange} />
+          <button
+            className="p-1 rounded hover:bg-black/5 dark:hover:bg-white/10"
+            onClick={() => setMenu((m) => !m)}
+          >
+            <MoreHorizontal className="w-4 h-4" />
+          </button>
+        </div>
         {menu && (
           <div className="absolute right-3 top-12 z-10 card py-1 min-w-[140px] shadow-lg">
             <button

@@ -100,6 +100,11 @@ export const api = {
   agents: () => req<Agent[]>("/api/agents"),
   createAgent: (body: Partial<Agent>) =>
     req<Agent>("/api/agents", { method: "POST", body: JSON.stringify(body) }),
+  patchAgent: (id: string, body: Partial<Agent>) =>
+    req<Agent>(`/api/agents/${id}`, {
+      method: "PATCH",
+      body: JSON.stringify(body),
+    }),
   startAgent: (id: string) =>
     req<Agent>(`/api/agents/${id}/start`, { method: "POST" }),
   stopAgent: (id: string) =>

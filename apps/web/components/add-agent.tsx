@@ -1,9 +1,9 @@
 "use client";
 
 import { useQuery } from "@tanstack/react-query";
-import { AlertTriangle, Check, Plus, X } from "lucide-react";
+import { AlertTriangle, Check, Pencil, Plus, X } from "lucide-react";
 import { useMemo, useState } from "react";
-import { api, capabilities, composio } from "@/lib/api";
+import { Agent, api, capabilities, composio } from "@/lib/api";
 
 export function AddAgentTile({ onCreated }: { onCreated: () => void }) {
   const [open, setOpen] = useState(false);
@@ -17,24 +17,80 @@ export function AddAgentTile({ onCreated }: { onCreated: () => void }) {
         <Plus className="w-6 h-6 mb-2" />
         <span className="text-sm font-medium">Add Agent</span>
       </button>
-      {open && <AddAgentSheet onClose={() => setOpen(false)} onCreated={onCreated} />}
+      {open && <AgentSheet onClose={() => setOpen(false)} onSaved={onCreated} />}
     </>
   );
 }
 
-function AddAgentSheet({ onClose, onCreated }: { onClose: () => void; onCreated: () => void }) {
-  const [name, setName] = useState("");
-  const [role, setRole] = useState("");
-  const [description, setDescription] = useState("");
-  const [icon, setIcon] = useState("🤖");
-  const [model, setModel] = useState("anthropic/claude-sonnet-4.6");
-  const [systemPrompt, setSystemPrompt] = useState("");
-  const [toolsets, setToolsets] = useState<string[]>(["composio"]);
+// Entry point for editing an existing agent. Renders nothing inline — callers
+// embed their own trigger (button, menu item) and pass `existing`.
+export function EditAgentButton({
+  agent,
+  onSaved,
+  className,
+}: {
+  agent: Agent;
+  onSaved: () => void;
+  className?: string;
+}) {
+  const [open, setOpen] = useState(false);
+  return (
+    <>
+      <button
+        onClick={(e) => {
+          e.stopPropagation();
+          setOpen(true);
+        }}
+        className={
+          className ??
+          "p-1.5 rounded hover:bg-black/5 dark:hover:bg-white/10 text-muted"
+        }
+        title="Edit agent"
+      >
+        <Pencil className="w-3.5 h-3.5" />
+      </button>
+      {open && (
+        <AgentSheet
+          existing={agent}
+          onClose={() => setOpen(false)}
+          onSaved={() => {
+            setOpen(false);
+            onSaved();
+          }}
+        />
+      )}
+    </>
+  );
+}
+
+function AgentSheet({
+  existing,
+  onClose,
+  onSaved,
+}: {
+  existing?: Agent;
+  onClose: () => void;
+  onSaved: () => void;
+}) {
+  const isEdit = Boolean(existing);
+  const [name, setName] = useState(existing?.name ?? "");
+  const [role, setRole] = useState(existing?.role ?? "");
+  const [description, setDescription] = useState(existing?.description ?? "");
+  const [icon, setIcon] = useState(existing?.icon || "🤖");
+  const [model, setModel] = useState(
+    existing?.model ?? "anthropic/claude-sonnet-4.6",
+  );
+  const [systemPrompt, setSystemPrompt] = useState(existing?.system_prompt ?? "");
+  const [toolsets, setToolsets] = useState<string[]>(
+    existing?.toolsets ?? (existing ? [] : ["composio"]),
+  );
   // Per-agent Composio scoping: which connected apps this agent can touch.
   // Empty = all of them (legacy behaviour). Scoped = the agent's briefing
   // and tool surface only mention the picked toolkits → cleaner reasoning,
   // fewer wasted tokens on irrelevant integrations.
-  const [composioToolkits, setComposioToolkits] = useState<string[]>([]);
+  const [composioToolkits, setComposioToolkits] = useState<string[]>(
+    existing?.composio_toolkits ?? [],
+  );
   const [busy, setBusy] = useState(false);
   const [err, setErr] = useState<string | null>(null);
   const capsQ = useQuery({ queryKey: ["capabilities"], queryFn: capabilities.list });
@@ -75,7 +131,7 @@ function AddAgentSheet({ onClose, onCreated }: { onClose: () => void; onCreated:
     setBusy(true);
     setErr(null);
     try {
-      await api.createAgent({
+      const body = {
         name,
         role,
         description,
@@ -85,9 +141,14 @@ function AddAgentSheet({ onClose, onCreated }: { onClose: () => void; onCreated:
         toolsets: toolsets.length ? toolsets : undefined,
         composio_toolkits:
           composioEnabled && composioToolkits.length ? composioToolkits : undefined,
-      } as never);
-      onCreated();
-      onClose();
+      };
+      if (existing) {
+        await api.patchAgent(existing.id, body as never);
+      } else {
+        await api.createAgent(body as never);
+      }
+      onSaved();
+      if (!existing) onClose();
     } catch (e: unknown) {
       setErr(e instanceof Error ? e.message : String(e));
     } finally {
@@ -103,11 +164,19 @@ function AddAgentSheet({ onClose, onCreated }: { onClose: () => void; onCreated:
         className="w-full md:w-[480px] h-full bg-[var(--surface)] border-l border-line p-5 md:p-6 flex flex-col gap-4 overflow-y-auto"
       >
         <div className="flex items-center justify-between">
-          <h2 className="text-lg font-semibold">Add Agent</h2>
+          <h2 className="text-lg font-semibold">
+            {isEdit ? `Edit ${existing!.name}` : "Add Agent"}
+          </h2>
           <button type="button" onClick={onClose} className="p-1 hover:bg-black/5 rounded">
             <X className="w-4 h-4" />
           </button>
         </div>
+        {isEdit && (
+          <p className="text-xs text-muted -mt-2">
+            Changes save immediately and apply to the next message this agent
+            handles. Existing conversations keep their original instructions.
+          </p>
+        )}
 
         <Field label="Name">
           <input
@@ -150,10 +219,22 @@ function AddAgentSheet({ onClose, onCreated }: { onClose: () => void; onCreated:
           <textarea
             value={systemPrompt}
             onChange={(e) => setSystemPrompt(e.target.value)}
-            rows={6}
+            rows={8}
             className="input font-mono text-xs"
-            placeholder="You are an AI employee that..."
+            placeholder={
+              "You are an AI employee that triages our inbox each morning.\n\n" +
+              "Tone: warm, professional, brief. Never use exclamation marks. " +
+              "Always sign off with 'Best regards, [Name]'.\n\n" +
+              "Rules:\n" +
+              "- Reply to real human emails. Skip newsletters, no-reply addresses, and anything with 'unsubscribe' in the body.\n" +
+              "- If unsure, leave it unread and flag in your end-of-day summary.\n" +
+              "- Never share customer data outside the team."
+            }
           />
+          <span className="text-[10px] text-muted mt-0.5">
+            This is the agent&apos;s standing instructions — its job, tone, and
+            what it should refuse. Edit any time; the next message picks it up.
+          </span>
         </Field>
 
         <Field label="Model">
@@ -287,7 +368,13 @@ function AddAgentSheet({ onClose, onCreated }: { onClose: () => void; onCreated:
             disabled={busy || !name}
             className="btn-primary flex-1 disabled:opacity-40"
           >
-            {busy ? "Creating..." : "Create agent"}
+            {busy
+              ? isEdit
+                ? "Saving..."
+                : "Creating..."
+              : isEdit
+                ? "Save changes"
+                : "Create agent"}
           </button>
         </div>
 
