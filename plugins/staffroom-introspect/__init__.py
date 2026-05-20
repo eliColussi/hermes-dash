@@ -135,7 +135,7 @@ def _query_state_db(query: str, params: tuple = ()) -> List[sqlite3.Row]:
 # ---------------------------------------------------------------------------
 # Tool handlers
 # ---------------------------------------------------------------------------
-def _handle_list_agents(arguments: Dict[str, Any]) -> str:
+def _handle_list_agents(arguments: Dict[str, Any], **_kw) -> str:
     agents = _load_agents()
     if not agents:
         return json.dumps({"agents": [], "count": 0, "note": "No agents configured yet. Tell the operator to head to /agents and click 'Add Agent'."})
@@ -153,7 +153,7 @@ def _handle_list_agents(arguments: Dict[str, Any]) -> str:
     return json.dumps({"agents": out, "count": len(out)}, indent=2)
 
 
-def _handle_recent_activity(arguments: Dict[str, Any]) -> str:
+def _handle_recent_activity(arguments: Dict[str, Any], **_kw) -> str:
     hours = int(arguments.get("hours", 24))
     agent_id = arguments.get("agent_id") or None
     limit = int(arguments.get("limit", 50))
@@ -171,7 +171,7 @@ def _handle_recent_activity(arguments: Dict[str, Any]) -> str:
     }, indent=2, default=str)
 
 
-def _handle_agent_summary(arguments: Dict[str, Any]) -> str:
+def _handle_agent_summary(arguments: Dict[str, Any], **_kw) -> str:
     """Per-agent rollup: sessions today, last-run outcome, cost.
 
     Audit events give us session counts and outcomes; state.db gives the
@@ -331,9 +331,9 @@ def _safe(handler):
     import functools, traceback as _tb
 
     @functools.wraps(handler)
-    def wrapped(arguments):
+    def wrapped(arguments, **kwargs):
         try:
-            return handler(arguments)
+            return handler(arguments, **kwargs)
         except Exception as exc:
             logger.exception("staffroom-introspect handler %s failed", handler.__name__)
             return json.dumps({
