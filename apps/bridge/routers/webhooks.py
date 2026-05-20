@@ -253,36 +253,82 @@ def delete_webhook(name: str) -> None:
     agent_links.unlink_webhook(name)
 
 
-class WebhookEnableToggle(BaseModel):
-    enabled: bool
+class WebhookPatch(BaseModel):
+    enabled: Optional[bool] = None
+    title: Optional[str] = None          # human display name; slug stays fixed
+    description: Optional[str] = None
+    prompt: Optional[str] = None         # the user's plain-English instructions
+    deliver: Optional[str] = None
+    deliver_chat_id: Optional[str] = None
+
+
+def _find_route_key(subs: dict, name: str) -> Optional[str]:
+    """Triggers may be stored under either the live slug or the paused
+    sentinel. Returns whichever key currently holds the config, or None."""
+    if name in subs:
+        return name
+    paused = f"__paused__{name}"
+    if paused in subs:
+        return paused
+    return None
 
 
 @router.patch("/{name}")
-def toggle_webhook(name: str, payload: WebhookEnableToggle) -> dict:
-    """Soft-pause a trigger without losing its config or URL.
+def patch_webhook(name: str, payload: WebhookPatch) -> dict:
+    """Update an existing trigger.
 
-    We park the disabled route under a `paused:` prefix so HERMÉS' webhook
-    adapter no longer matches incoming POSTs, then restore the original
-    name when re-enabled. This way the URL the operator pasted into Stripe
-    keeps working the moment they un-pause."""
+    Two responsibilities in one endpoint:
+      1. Toggle enabled — the slug gets renamed to/from `__paused__<slug>`
+         so HERMÉS's webhook adapter stops matching, but the route config
+         (and operator-facing URL) is preserved.
+      2. Edit content — title, description, prompt, deliver target. The
+         slug and HMAC secret are intentionally immutable: changing them
+         would break the URL the operator already pasted into Stripe/etc.
+         Reassigning agent ownership also stays a delete-and-recreate flow
+         so the agent_links pause-cascade stays consistent.
+    """
     name = name.strip().lower()
     subs = _load_subs()
+    key = _find_route_key(subs, name)
+    if key is None:
+        raise HTTPException(404, "Trigger not found")
+    route = subs[key]
+
+    # ── Content edits ────────────────────────────────────────────────────
+    if payload.title is not None:
+        route["title"] = payload.title
+    if payload.description is not None:
+        route["description"] = payload.description
+    if payload.prompt is not None:
+        # Look up the owning agent so we can re-bake its identity into the
+        # composed prompt the agent actually sees on each event. Falls back
+        # to None which _compose_prompt handles gracefully.
+        agent: Optional[dict] = None
+        if route.get("agent_id"):
+            agent = next(
+                (a for a in hc.load_agents() if a.get("id") == route["agent_id"]),
+                None,
+            )
+        route["user_prompt"] = payload.prompt
+        route["prompt"] = _compose_prompt(payload.prompt, agent)
+    if payload.deliver is not None:
+        route["deliver"] = payload.deliver
+    if payload.deliver_chat_id is not None:
+        route.setdefault("deliver_extra", {})["chat_id"] = payload.deliver_chat_id
+
+    # ── Enabled toggle (rename key for HERMES adapter matching) ─────────
     paused_name = f"__paused__{name}"
-    if payload.enabled:
-        # Resume: move config back to original key.
-        if paused_name in subs and name not in subs:
-            subs[name] = subs.pop(paused_name)
-            _save_subs(subs)
-            return {"name": name, "enabled": True}
-        if name in subs:
-            return {"name": name, "enabled": True}
-        raise HTTPException(404, "Trigger not found")
-    else:
-        # Pause: move config out of the active key.
-        if name in subs:
-            subs[paused_name] = subs.pop(name)
-            _save_subs(subs)
-            return {"name": name, "enabled": False}
-        if paused_name in subs:
-            return {"name": name, "enabled": False}
-        raise HTTPException(404, "Trigger not found")
+    if payload.enabled is True and key == paused_name:
+        subs.pop(key)
+        subs[name] = route
+        key = name
+    elif payload.enabled is False and key == name:
+        subs.pop(key)
+        subs[paused_name] = route
+        key = paused_name
+
+    _save_subs(subs)
+    return {
+        "name": name,
+        "enabled": key == name,
+    }

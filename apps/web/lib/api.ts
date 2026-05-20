@@ -349,6 +349,21 @@ export const webhooks = {
       { method: "POST", body: JSON.stringify(body) },
     ),
   remove: (name: string) => fetch(`/api/webhooks/${name}`, { method: "DELETE" }),
+  patch: (
+    name: string,
+    body: Partial<{
+      enabled: boolean;
+      title: string;
+      description: string;
+      prompt: string;
+      deliver: string;
+      deliver_chat_id: string;
+    }>,
+  ) =>
+    req<{ name: string; enabled: boolean }>(`/api/webhooks/${name}`, {
+      method: "PATCH",
+      body: JSON.stringify(body),
+    }),
 };
 
 export interface ChatThread {

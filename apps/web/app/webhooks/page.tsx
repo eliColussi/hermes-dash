@@ -1,7 +1,7 @@
 "use client";
 
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { ArrowLeft, ArrowRight, Bell, Copy, HelpCircle, Plus, Trash2, X } from "lucide-react";
+import { ArrowLeft, ArrowRight, Bell, Copy, HelpCircle, Pencil, Plus, Trash2, X } from "lucide-react";
 import { useMemo, useState } from "react";
 import { Agent, Webhook, api, webhooks } from "@/lib/api";
 
@@ -42,6 +42,7 @@ export default function WebhooksPage() {
   const q = useQuery({ queryKey: ["webhooks"], queryFn: webhooks.list });
   const agentsQ = useQuery({ queryKey: ["agents"], queryFn: api.agents });
   const [open, setOpen] = useState(false);
+  const [editing, setEditing] = useState<Webhook | null>(null);
   const [createdSecret, setCreatedSecret] = useState<{ name: string; url: string; secret: string } | null>(null);
 
   const remove = useMutation({
@@ -101,6 +102,7 @@ export default function WebhooksPage() {
                 key={w.name}
                 w={w}
                 agent={w.agent_id ? agentLookup.get(w.agent_id) : undefined}
+                onEdit={() => setEditing(w)}
                 onDelete={() => {
                   if (confirm(`Delete trigger "${w.title || w.name}"?`)) remove.mutate(w.name);
                 }}
@@ -124,6 +126,17 @@ export default function WebhooksPage() {
       {createdSecret && (
         <SecretRevealModal data={createdSecret} onClose={() => setCreatedSecret(null)} />
       )}
+
+      {editing && (
+        <EditTriggerSheet
+          trigger={editing}
+          onClose={() => setEditing(null)}
+          onSaved={() => {
+            setEditing(null);
+            qc.invalidateQueries({ queryKey: ["webhooks"] });
+          }}
+        />
+      )}
     </div>
   );
 }
@@ -131,10 +144,12 @@ export default function WebhooksPage() {
 function WebhookRow({
   w,
   agent,
+  onEdit,
   onDelete,
 }: {
   w: Webhook;
   agent: Agent | undefined;
+  onEdit: () => void;
   onDelete: () => void;
 }) {
   const deliveryLabel = DELIVERIES.find((d) => d.id === w.deliver)?.label ?? w.deliver;
@@ -155,13 +170,22 @@ function WebhookRow({
             <div className="text-xs text-muted mt-0.5">{w.description}</div>
           )}
         </div>
-        <button
-          onClick={onDelete}
-          className="p-1.5 rounded hover:bg-red-50 dark:hover:bg-red-950 text-red-600"
-          title="Delete"
-        >
-          <Trash2 className="w-3.5 h-3.5" />
-        </button>
+        <div className="flex items-center gap-1">
+          <button
+            onClick={onEdit}
+            className="p-1.5 rounded hover:bg-black/5 dark:hover:bg-white/10 text-muted"
+            title="Edit trigger"
+          >
+            <Pencil className="w-3.5 h-3.5" />
+          </button>
+          <button
+            onClick={onDelete}
+            className="p-1.5 rounded hover:bg-red-50 dark:hover:bg-red-950 text-red-600"
+            title="Delete"
+          >
+            <Trash2 className="w-3.5 h-3.5" />
+          </button>
+        </div>
       </div>
       <div className="grid grid-cols-1 md:grid-cols-2 gap-3 mt-3">
         <CopyableRow label="Paste this URL into the source app" value={w.url} />
@@ -503,6 +527,146 @@ function SecretRevealModal({
           Done
         </button>
       </div>
+    </div>
+  );
+}
+
+// ──────────────────────────────────────────────────────────────────────
+// Edit trigger sheet — single-pane form for tweaking existing triggers.
+// Slug, secret, and owning agent stay immutable so the public URL keeps
+// working and the pause-cascade contract doesn't break.
+// ──────────────────────────────────────────────────────────────────────
+
+function EditTriggerSheet({
+  trigger,
+  onClose,
+  onSaved,
+}: {
+  trigger: Webhook;
+  onClose: () => void;
+  onSaved: () => void;
+}) {
+  const [title, setTitle] = useState(trigger.title || trigger.name);
+  const [description, setDescription] = useState(trigger.description || "");
+  const [prompt, setPrompt] = useState(trigger.prompt || "");
+  const [deliver, setDeliver] = useState(trigger.deliver || "log");
+  const [busy, setBusy] = useState(false);
+  const [err, setErr] = useState<string | null>(null);
+
+  async function submit(e: React.FormEvent) {
+    e.preventDefault();
+    setBusy(true);
+    setErr(null);
+    try {
+      await webhooks.patch(trigger.name, {
+        title,
+        description,
+        prompt,
+        deliver,
+      });
+      onSaved();
+    } catch (e: unknown) {
+      setErr(e instanceof Error ? e.message : String(e));
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  return (
+    <div className="fixed inset-0 z-50 bg-black/40 flex justify-end" onClick={onClose}>
+      <form
+        onSubmit={submit}
+        onClick={(e) => e.stopPropagation()}
+        className="w-full md:w-[520px] h-full bg-[var(--surface)] border-l border-line p-5 md:p-6 flex flex-col gap-4 overflow-y-auto"
+      >
+        <div className="flex items-center justify-between">
+          <h2 className="text-lg font-semibold">Edit trigger</h2>
+          <button type="button" onClick={onClose} className="p-1 hover:bg-black/5 rounded">
+            <X className="w-4 h-4" />
+          </button>
+        </div>
+        <p className="text-xs text-muted -mt-2">
+          The trigger URL and signing secret stay the same — anything you&apos;ve
+          already pasted into Stripe / GitHub / etc. keeps working. To change
+          which agent runs this, delete and recreate.
+        </p>
+
+        <div className="flex flex-col gap-1.5">
+          <span className="text-xs font-medium text-muted">Display name</span>
+          <input
+            required
+            value={title}
+            onChange={(e) => setTitle(e.target.value)}
+            className="px-3 py-2 rounded-lg border border-line bg-[var(--bg)] text-sm"
+          />
+          <span className="text-[10px] text-muted">
+            Only the title is editable. The URL slug is locked to
+            <code className="font-mono mx-1">{trigger.name}</code>
+            so external services keep reaching this trigger.
+          </span>
+        </div>
+
+        <div className="flex flex-col gap-1.5">
+          <span className="text-xs font-medium text-muted">Description</span>
+          <input
+            value={description}
+            onChange={(e) => setDescription(e.target.value)}
+            className="px-3 py-2 rounded-lg border border-line bg-[var(--bg)] text-sm"
+            placeholder="One line. What does this trigger do?"
+          />
+        </div>
+
+        <div className="flex flex-col gap-1.5">
+          <span className="text-xs font-medium text-muted">
+            Instructions for the agent
+          </span>
+          <textarea
+            value={prompt}
+            onChange={(e) => setPrompt(e.target.value)}
+            rows={6}
+            className="px-3 py-2 rounded-lg border border-line bg-[var(--bg)] text-sm font-mono"
+            placeholder="When this fires, do X. Be specific about tone, who to notify, what to skip."
+          />
+          <span className="text-[10px] text-muted">
+            The full event payload is appended invisibly — no need to write
+            <code className="font-mono mx-1">{"{payload.x.y}"}</code>
+            placeholders unless you want them.
+          </span>
+        </div>
+
+        <div className="flex flex-col gap-1.5">
+          <span className="text-xs font-medium text-muted">Deliver result to</span>
+          <select
+            value={deliver}
+            onChange={(e) => setDeliver(e.target.value)}
+            className="px-3 py-2 rounded-lg border border-line bg-[var(--bg)] text-sm"
+          >
+            {DELIVERIES.map((d) => (
+              <option key={d.id} value={d.id}>
+                {d.label}
+              </option>
+            ))}
+          </select>
+        </div>
+
+        {err && <div className="text-sm text-red-600">{err}</div>}
+
+        <div className="mt-auto flex gap-2">
+          <button
+            type="button"
+            onClick={onClose}
+            className="flex-1 px-4 py-2 border border-line rounded-lg text-sm"
+          >
+            Cancel
+          </button>
+          <button
+            disabled={busy || !title}
+            className="btn-primary flex-1 disabled:opacity-40"
+          >
+            {busy ? "Saving…" : "Save changes"}
+          </button>
+        </div>
+      </form>
     </div>
   );
 }
