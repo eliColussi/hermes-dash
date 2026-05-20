@@ -15,8 +15,9 @@ import psutil
 from fastapi import APIRouter, HTTPException
 from pydantic import BaseModel
 
+from .. import hermes_client as hc
 from .. import vault as _vault
-from ..config import HERMES_BIN, HERMES_HOME, STAFFROOM_RUNTIME_DIR, ensure_dirs
+from ..config import HERMES_BIN, HERMES_CONFIG_YAML, HERMES_HOME, STAFFROOM_RUNTIME_DIR, ensure_dirs
 from ..services.subprocess_env import sanitized_env
 
 router = APIRouter(prefix="/api/integrations", tags=["integrations"])
@@ -369,3 +370,84 @@ def gateway_stop() -> dict:
         pass
     GATEWAY_PIDFILE.unlink(missing_ok=True)
     return {"running": False}
+
+
+# ---------------------------------------------------------------------------
+# Channel agent — which Staff Room agent represents the operator on chat
+# platforms. HERMÉS reads agent.system_prompt from ~/.hermes/config.yaml and
+# applies it to every messaging adapter. So setting this single field makes
+# the chosen agent the voice on Telegram + Slack + Discord + Mattermost +
+# Email simultaneously.
+#
+# Per-channel overrides (different agents per platform) would need a HERMÉS
+# fork — that's the v1.2 work in the PRD. This endpoint is the v1 answer.
+# ---------------------------------------------------------------------------
+
+class ChannelAgentPayload(BaseModel):
+    agent_id: str
+
+
+@router.get("/channel-agent")
+def get_channel_agent() -> dict:
+    """Return which agent is currently set as the channel voice, by matching
+    the system_prompt persisted in config.yaml against our agents.yaml."""
+    if not HERMES_CONFIG_YAML.exists():
+        return {"agent_id": None, "agent_name": None}
+    import yaml as _y
+    try:
+        with HERMES_CONFIG_YAML.open(encoding="utf-8") as f:
+            cfg = _y.safe_load(f) or {}
+    except Exception:
+        return {"agent_id": None, "agent_name": None}
+    current_prompt = (cfg.get("agent", {}) or {}).get("system_prompt", "") or ""
+    if not current_prompt.strip():
+        return {"agent_id": None, "agent_name": None}
+    for a in hc.load_agents():
+        if (a.get("system_prompt") or "").strip() == current_prompt.strip():
+            return {"agent_id": a.get("id"), "agent_name": a.get("name")}
+    # Operator may have hand-edited config.yaml — report as "custom".
+    return {"agent_id": None, "agent_name": "custom (set outside the dashboard)"}
+
+
+@router.put("/channel-agent")
+def set_channel_agent(payload: ChannelAgentPayload) -> dict:
+    """Set the Staff Room agent that responds on every chat platform.
+
+    Writes the chosen agent's system_prompt into HERMÉS's config.yaml at
+    agent.system_prompt — the location its gateway reads on session start.
+    The gateway needs to be restarted after this for the change to take
+    effect (use POST /api/integrations/gateway/stop + /start).
+    """
+    agents = hc.load_agents()
+    chosen = next((a for a in agents if a.get("id") == payload.agent_id), None)
+    if not chosen:
+        raise HTTPException(404, f"Agent '{payload.agent_id}' not found")
+
+    import yaml as _y
+    ensure_dirs()
+    HERMES_HOME.mkdir(parents=True, exist_ok=True)
+    cfg: dict = {}
+    if HERMES_CONFIG_YAML.exists():
+        try:
+            with HERMES_CONFIG_YAML.open(encoding="utf-8") as f:
+                cfg = _y.safe_load(f) or {}
+        except Exception:
+            cfg = {}
+    agent_cfg = cfg.setdefault("agent", {})
+    agent_cfg["system_prompt"] = (chosen.get("system_prompt") or "").strip()
+    # Also stash the identity so the gateway logs are readable + a future
+    # operator opening config.yaml can tell which Staff Room agent is wired.
+    agent_cfg["name"] = chosen.get("name") or chosen.get("id")
+    tmp = HERMES_CONFIG_YAML.with_suffix(".tmp")
+    with tmp.open("w", encoding="utf-8") as f:
+        _y.safe_dump(cfg, f, sort_keys=False)
+    try:
+        os.chmod(tmp, 0o600)
+    except OSError:
+        pass
+    os.replace(tmp, HERMES_CONFIG_YAML)
+    return {
+        "agent_id": chosen.get("id"),
+        "agent_name": chosen.get("name"),
+        "note": "Restart the messaging service for the change to take effect.",
+    }

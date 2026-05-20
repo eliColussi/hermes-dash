@@ -12,8 +12,8 @@
  * the setup is genuinely a multi-day process and a 5-step list would lie.
  */
 
-import { useMutation, useQueryClient } from "@tanstack/react-query";
-import { Check, ExternalLink, X } from "lucide-react";
+import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import { AlertTriangle, Check, ExternalLink, Lock, X } from "lucide-react";
 import { useState } from "react";
 import { api } from "@/lib/api";
 
@@ -234,10 +234,26 @@ const ADVANCED = [
 export function ChannelSetupSection() {
   const [openId, setOpenId] = useState<string | null>(null);
   const open = CHANNELS.find((c) => c.id === openId) ?? null;
+  // Surface the current channel agent in the section header so the operator
+  // can see at a glance "Sonnet is the voice on chat" without opening a card.
+  const currentQ = useQuery({
+    queryKey: ["channel-agent"],
+    queryFn: api.getChannelAgent,
+  });
 
   return (
     <div className="card p-5 mb-4">
-      <div className="text-sm font-medium mb-1">Talk to your agents on…</div>
+      <div className="flex items-baseline justify-between gap-3 mb-1">
+        <div className="text-sm font-medium">Talk to your agents on…</div>
+        {currentQ.data?.agent_name && (
+          <span className="text-[11px] text-muted">
+            Current voice on chat:{" "}
+            <span className="text-[var(--ink)]/80 font-medium">
+              {currentQ.data.agent_name}
+            </span>
+          </span>
+        )}
+      </div>
       <p className="text-xs text-muted mb-4">
         Pick a chat app. We&apos;ll walk you through getting a bot token in
         plain English — no developer terminology, no surprise steps.
@@ -292,8 +308,27 @@ function ChannelWalkthroughModal({
   );
   const [savedOk, setSavedOk] = useState(false);
 
+  // Which Staff Room agent should answer messages on every chat platform.
+  // HERMÉS reads ONE agent.system_prompt from config.yaml — it's shared
+  // across Telegram + Slack + Discord + Mattermost + Email today. Per-
+  // channel agents need a HERMÉS fork (v1.2 in the PRD), so for v1 we
+  // surface this honestly: one choice, applies everywhere.
+  const agentsQ = useQuery({ queryKey: ["agents"], queryFn: api.agents });
+  const currentQ = useQuery({
+    queryKey: ["channel-agent"],
+    queryFn: api.getChannelAgent,
+  });
+  const [agentId, setAgentId] = useState<string>("");
+  // Sync default selection to whatever's currently configured on the gateway.
+  if (agentId === "" && currentQ.data?.agent_id) {
+    setAgentId(currentQ.data.agent_id);
+  }
+
   const save = useMutation({
     mutationFn: async () => {
+      if (!agentId) {
+        throw new Error("Pick which agent should answer messages on this channel before saving.");
+      }
       // Strip blanks so we don't overwrite an existing token with an empty
       // value when the operator only updates one of two fields.
       const filtered = Object.fromEntries(
@@ -302,11 +337,16 @@ function ChannelWalkthroughModal({
       if (Object.keys(filtered).length === 0) {
         throw new Error("Paste at least one token before saving.");
       }
+      // Persist the agent choice FIRST — if the token save fails (bad
+      // token, network blip) we'd rather have the agent set correctly
+      // and re-prompt the operator for the token than the other way round.
+      await api.setChannelAgent(agentId);
       return api.saveIntegration(channel.id, filtered);
     },
     onSuccess: () => {
       setSavedOk(true);
       qc.invalidateQueries({ queryKey: ["integrations"] });
+      qc.invalidateQueries({ queryKey: ["channel-agent"] });
     },
   });
 
@@ -372,6 +412,30 @@ function ChannelWalkthroughModal({
           </ol>
 
           <div className="space-y-3 pt-2 border-t border-line">
+            <label className="flex flex-col gap-1">
+              <span className="text-xs font-medium text-muted">
+                Which agent should answer messages here?
+              </span>
+              <select
+                value={agentId}
+                onChange={(e) => setAgentId(e.target.value)}
+                className="px-3 py-2 rounded-lg border border-line bg-[var(--bg)] text-sm"
+              >
+                <option value="">— Pick an agent —</option>
+                {(agentsQ.data ?? []).map((a) => (
+                  <option key={a.id} value={a.id}>
+                    {a.icon} {a.name}
+                  </option>
+                ))}
+              </select>
+              <span className="text-[10px] text-muted">
+                Today, every chat channel (Telegram, Slack, Discord,
+                Mattermost, Email) shares one agent. Pick the one whose
+                voice + skills should answer your messages. Per-channel
+                routing is a planned upgrade.
+              </span>
+            </label>
+
             {channel.id === "email" && (
               <div className="flex flex-col gap-1.5 pb-1">
                 <span className="text-xs font-medium text-muted">
@@ -423,7 +487,7 @@ function ChannelWalkthroughModal({
           </div>
 
           {savedOk && (
-            <div className="rounded-lg border border-ok/30 bg-accent-soft p-3">
+            <div className="rounded-lg border border-ok/30 bg-accent-soft p-3 space-y-2">
               <div className="flex items-start gap-2 text-sm">
                 <Check className="w-4 h-4 text-ok shrink-0 mt-0.5" />
                 <div className="flex-1">
@@ -445,6 +509,27 @@ function ChannelWalkthroughModal({
                   </button>
                 </div>
               </div>
+              {/* Storage-tier badge — operators (and their clients) should
+                  always know whether the credential they just pasted was
+                  encrypted at rest or stored as plain text. */}
+              {save.data?.storage === "vault" ? (
+                <div className="flex items-start gap-2 text-[11px] text-muted border-t border-ok/20 pt-2">
+                  <Lock className="w-3.5 h-3.5 text-ok shrink-0 mt-0.5" />
+                  <span>
+                    Stored encrypted — libsodium XSalsa20-Poly1305, key held
+                    only in your Railway environment, never on disk.
+                  </span>
+                </div>
+              ) : (
+                <div className="flex items-start gap-2 text-[11px] text-warn border-t border-warn/20 pt-2">
+                  <AlertTriangle className="w-3.5 h-3.5 shrink-0 mt-0.5" />
+                  <span>
+                    Stored as plain text in a 0600-permissioned file. Ask
+                    your team to set <code className="font-mono">STAFFROOM_SECRETS_KEY</code> in
+                    Railway to enable at-rest encryption.
+                  </span>
+                </div>
+              )}
             </div>
           )}
         </div>
@@ -459,8 +544,9 @@ function ChannelWalkthroughModal({
           {!savedOk && (
             <button
               onClick={() => save.mutate()}
-              disabled={save.isPending}
+              disabled={save.isPending || !agentId}
               className="btn-primary disabled:opacity-50"
+              title={!agentId ? "Pick an agent above before saving" : undefined}
             >
               {save.isPending ? "Saving…" : "Save token"}
             </button>

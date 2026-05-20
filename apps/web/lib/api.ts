@@ -145,7 +145,7 @@ export const api = {
       vault_active: boolean;
     }>("/api/integrations"),
   saveIntegration: (provider: string, values: Record<string, string>) =>
-    req<{ ok: boolean }>("/api/integrations", {
+    req<{ ok: boolean; storage: "vault" | "env" }>("/api/integrations", {
       method: "PUT",
       body: JSON.stringify({ provider, values }),
     }),
@@ -153,6 +153,15 @@ export const api = {
     req<{ running: boolean; pid: number }>("/api/integrations/gateway/start", { method: "POST" }),
   stopGateway: () =>
     req<{ running: boolean }>("/api/integrations/gateway/stop", { method: "POST" }),
+  getChannelAgent: () =>
+    req<{ agent_id: string | null; agent_name: string | null }>(
+      "/api/integrations/channel-agent",
+    ),
+  setChannelAgent: (agent_id: string) =>
+    req<{ agent_id: string; agent_name: string; note: string }>(
+      "/api/integrations/channel-agent",
+      { method: "PUT", body: JSON.stringify({ agent_id }) },
+    ),
   settings: () => req<SettingsView>("/api/settings"),
   mcpConfig: () =>
     req<{ claude_code: unknown; instructions: string }>(
