@@ -17,6 +17,7 @@ from pydantic import BaseModel
 
 from .. import vault as _vault
 from ..config import HERMES_BIN, HERMES_HOME, STAFFROOM_RUNTIME_DIR, ensure_dirs
+from ..services.subprocess_env import sanitized_env
 
 router = APIRouter(prefix="/api/integrations", tags=["integrations"])
 
@@ -225,7 +226,7 @@ def gateway_start() -> dict:
             stderr=subprocess.STDOUT,
             stdin=subprocess.DEVNULL,
             start_new_session=True,
-            env={**os.environ},
+            env=sanitized_env(),
         )
     GATEWAY_PIDFILE.write_text(str(proc.pid))
     return {"running": True, "pid": proc.pid}

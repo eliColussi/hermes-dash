@@ -34,6 +34,7 @@ from .config import (
     VENDOR_SKILLS_DIR,
     ensure_dirs,
 )
+from .services.subprocess_env import sanitized_env
 
 _yaml = YAML()
 _yaml.preserve_quotes = True
@@ -248,7 +249,7 @@ def start_agent(agent: dict[str, Any]) -> int:
             stderr=subprocess.STDOUT,
             stdin=subprocess.DEVNULL,
             start_new_session=True,
-            env={**os.environ, "STAFFROOM_AGENT_ID": agent["id"]},
+            env=sanitized_env({"STAFFROOM_AGENT_ID": agent["id"]}),
         )
     _pidfile(agent["id"]).write_text(str(proc.pid))
     return proc.pid
