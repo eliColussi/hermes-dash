@@ -470,13 +470,22 @@ def _pairing_manager():
 @router.get("/pairing/pending")
 def list_pending_pairings() -> dict:
     """Return everyone currently waiting for the operator to approve them on
-    a bot. Empty list when there are none — the UI hides the banner."""
+    a bot. Empty list when there are none — the UI hides the banner.
+
+    Pairing codes expire after 1 hour (HERMÉS default), so if a user
+    messaged the bot more than an hour ago the list will be empty even
+    though they're still waiting; tell them to message again."""
     try:
         items = _pairing_manager().list_pending() or []
-    except Exception:
-        # Vendored HERMÉS may be unavailable in dev — surface as empty.
-        items = []
-    return {"items": items, "count": len(items)}
+        return {"items": items, "count": len(items)}
+    except ImportError as exc:
+        # Vendored HERMÉS isn't installed in this environment — bridge
+        # is running standalone (e.g. local dev without the gateway).
+        # Return a clear error rather than pretending all is well.
+        raise HTTPException(
+            503,
+            f"HERMÉS gateway package not available ({exc}). The bridge can't read pending pairings without it.",
+        )
 
 
 class PairingApprovePayload(BaseModel):
