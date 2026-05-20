@@ -195,6 +195,57 @@ def list_integrations() -> dict:
     }
 
 
+def _verify_channel_token(provider: str, values: dict[str, str]) -> Optional[str]:
+    """Hit each platform's "who am I" endpoint with the supplied token.
+
+    Returns None on success, or a human-readable error string on failure.
+    Stops bad tokens from ever reaching disk — without this, a typo crashes
+    the gateway in a tight restart loop until someone manually intervenes.
+
+    Only called for messaging channels (telegram/slack/discord). Model API
+    keys are not verified here — providers have inconsistent /me-style
+    endpoints and OpenRouter doesn't expose one.
+    """
+    import httpx
+    try:
+        if provider == "telegram":
+            tok = values.get("TELEGRAM_BOT_TOKEN", "")
+            if not tok:
+                return None  # nothing to verify
+            r = httpx.get(f"https://api.telegram.org/bot{tok}/getMe", timeout=8.0)
+            if r.status_code == 200 and r.json().get("ok"):
+                return None
+            return "Telegram rejected this token. Double-check you copied the whole thing from BotFather."
+        if provider == "slack":
+            tok = values.get("SLACK_BOT_TOKEN", "")
+            if not tok:
+                return None
+            r = httpx.post(
+                "https://slack.com/api/auth.test",
+                headers={"Authorization": f"Bearer {tok}"},
+                timeout=8.0,
+            )
+            if r.status_code == 200 and r.json().get("ok"):
+                return None
+            return "Slack rejected this bot token. Re-copy it from your app's Install App page (starts with xoxb-)."
+        if provider == "discord":
+            tok = values.get("DISCORD_BOT_TOKEN", "")
+            if not tok:
+                return None
+            r = httpx.get(
+                "https://discord.com/api/v10/users/@me",
+                headers={"Authorization": f"Bot {tok}"},
+                timeout=8.0,
+            )
+            if r.status_code == 200:
+                return None
+            return "Discord rejected this bot token. Generate a fresh one from the Bot tab (the old one stops working after Reset Token)."
+    except httpx.RequestError:
+        # Network blip — don't block save on our connectivity issue.
+        return None
+    return None
+
+
 @router.put("")
 def save_integration(payload: IntegrationCreds) -> dict:
     if payload.provider not in PROVIDERS:
@@ -203,6 +254,9 @@ def save_integration(payload: IntegrationCreds) -> dict:
     filtered = {k: v for k, v in payload.values.items() if k in valid_keys and v != ""}
     if not filtered:
         raise HTTPException(400, "No values provided")
+    err = _verify_channel_token(payload.provider, filtered)
+    if err:
+        raise HTTPException(400, err)
     # When the operator has opted into encryption (key env var set, OR a
     # vault file already exists from a prior call), route writes through the
     # vault. Otherwise fall back to plain .env for backwards compatibility.

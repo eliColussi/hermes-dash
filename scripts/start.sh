@@ -5,6 +5,24 @@ set -euo pipefail
 mkdir -p "${HERMES_HOME:-/data/hermes}" "${STAFFROOM_HOME:-/data/staffroom}"
 mkdir -p "${HERMES_HOME:-/data/hermes}/plugins"
 
+# Rotate large log files at boot so /data doesn't fill up over weeks of
+# uptime. Anything bigger than 50 MB gets renamed with a timestamp; the
+# oldest two rotated copies per log are kept. Cheap, no daemon needed —
+# the container restarts often enough that boot-time rotation is fine.
+LOG_DIRS="${HERMES_HOME:-/data/hermes}/logs ${STAFFROOM_HOME:-/data/staffroom}/runtime"
+for dir in $LOG_DIRS; do
+  [ -d "$dir" ] || continue
+  find "$dir" -maxdepth 1 -type f -name '*.log' -size +50M 2>/dev/null | while read -r f; do
+    mv "$f" "${f}.$(date +%Y%m%d-%H%M%S)" 2>/dev/null || true
+    echo "[start] rotated oversized log: $f"
+  done
+  # Keep at most 2 rotated copies per base name.
+  for base in $(find "$dir" -maxdepth 1 -type f -name '*.log.*' 2>/dev/null \
+                | sed -E 's/\.[0-9]{8}-[0-9]{6}$//' | sort -u); do
+    ls -1t "${base}".* 2>/dev/null | tail -n +3 | xargs -r rm -f
+  done
+done
+
 # Persistence check — same logic the bridge uses, surfaced loudly in Railway
 # logs so an operator never silently runs ephemeral.
 if [ -d /data ]; then
@@ -199,12 +217,23 @@ HERMES_BIN_PATH="$(command -v hermes || true)"
 if [ -n "$HERMES_BIN_PATH" ]; then
   echo "[start] hermes found at $HERMES_BIN_PATH — starting gateway with api_server on :$API_SERVER_PORT"
   (
+    # Exponential backoff so a bad config doesn't tight-loop the gateway
+    # and peg CPU / fill logs. Reset to 5s after a process that ran
+    # longer than 60s (clean recovery).
+    delay=5
     while true; do
+      start_ts=$(date +%s)
       # `gateway run` is the foreground subcommand — bare `gateway` just
       # prints help and exits 0, which would tight-loop the restart wrapper.
       "$HERMES_BIN_PATH" gateway run 2>&1 | sed 's/^/[gateway] /' || true
-      echo "[start] hermes gateway exited; restarting in 5s"
-      sleep 5
+      end_ts=$(date +%s)
+      if [ $((end_ts - start_ts)) -ge 60 ]; then
+        delay=5
+      else
+        delay=$((delay < 60 ? delay * 2 : 60))
+      fi
+      echo "[start] hermes gateway exited; restarting in ${delay}s"
+      sleep "$delay"
     done
   ) &
   GATEWAY_PID=$!
