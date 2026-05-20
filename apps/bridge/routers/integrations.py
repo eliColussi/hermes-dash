@@ -462,9 +462,11 @@ def set_channel_agent(payload: ChannelAgentPayload) -> dict:
 # ---------------------------------------------------------------------------
 
 def _pairing_manager():
-    """Import lazily — pulls in the vendored HERMÉS package, which is heavy."""
-    from gateway.pairing import PairingManager
-    return PairingManager()
+    """Import lazily — pulls in the vendored HERMÉS package, which is heavy.
+    The class is named PairingStore upstream (despite the docstring elsewhere
+    in HERMÉS calling it the 'pairing manager')."""
+    from gateway.pairing import PairingStore
+    return PairingStore()
 
 
 @router.get("/pairing/pending")
@@ -496,7 +498,13 @@ class PairingApprovePayload(BaseModel):
 @router.post("/pairing/approve")
 def approve_pairing(payload: PairingApprovePayload) -> dict:
     """Approve a single pending pairing code. The user can then DM the bot."""
-    pm = _pairing_manager()
+    try:
+        pm = _pairing_manager()
+    except ImportError as exc:
+        raise HTTPException(
+            503,
+            f"HERMÉS gateway package not available ({exc}). Ask your team to redeploy.",
+        )
     result = pm.approve_code(payload.platform, payload.code.strip().upper())
     if not result:
         raise HTTPException(

@@ -2,6 +2,18 @@
 from __future__ import annotations
 
 import os
+import sys
+from pathlib import Path
+
+# Make the vendored HERMÉS package importable regardless of whether the
+# `uv pip install -e /app/vendor/hermes-agent` step in the Dockerfile
+# silently failed. Railway has shown the install can quietly skip, which
+# left `from gateway.pairing import PairingManager` raising ImportError
+# at runtime and surfacing as 500s on the dashboard. Prepending the path
+# is idempotent and free.
+_VENDOR = Path(__file__).resolve().parent.parent.parent / "vendor" / "hermes-agent"
+if _VENDOR.is_dir() and str(_VENDOR) not in sys.path:
+    sys.path.insert(0, str(_VENDOR))
 
 from fastapi import Depends, FastAPI
 from fastapi.middleware.cors import CORSMiddleware
