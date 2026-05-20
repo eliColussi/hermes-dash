@@ -10,3 +10,4 @@ provides_tools:
   - staffroom_list_agents
   - staffroom_recent_activity
   - staffroom_agent_summary
+  - staffroom_delegate_task

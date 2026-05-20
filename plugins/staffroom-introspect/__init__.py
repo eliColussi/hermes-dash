@@ -1,26 +1,35 @@
 """staffroom-introspect plugin — gives the channel agent visibility into the
-Staff Room OS deployment it's running inside.
+Staff Room OS deployment it's running inside, AND the ability to delegate
+work to other agents.
 
-Three read-only tools, file-based (no auth, no HTTP calls):
+Tools:
 
-  staffroom_list_agents     — every agent defined in agents.yaml with role,
-                              model, toolsets, enabled/paused state
-  staffroom_recent_activity — recent events from the audit log, filterable
-                              by agent and hours
-  staffroom_agent_summary   — per-agent: count of sessions today, last run
-                              outcome, cost summary
+  Read (introspection — pattern B):
+    staffroom_list_agents     — every agent in agents.yaml with role,
+                                model, toolsets, enabled/paused state
+    staffroom_recent_activity — recent events from the audit log,
+                                filterable by agent and hours
+    staffroom_agent_summary   — one agent's day: sessions today, cost,
+                                last run outcome
+
+  Write (delegation — pattern C):
+    staffroom_delegate_task   — hand a task to a specific agent at a time.
+                                Covers "do this now-ish" (one-shot) and
+                                "do this every weekday at 9am" (cron).
+                                Creates a HERMÉS cron job + links to the
+                                agent so the existing pause-cascade UX
+                                works.
 
 Designed for the Orchestrator pattern: pick this agent as your channel
-voice on Telegram/Slack/Discord, and operators can DM it questions like
-"what have my agents done today?" or "is the inbox agent stuck?" and get
-real answers instead of generic LLM guesses.
+voice on Telegram/Slack/Discord, and operators can DM it questions OR
+give it instructions and trust the work gets to the right agent.
 
 Data sources:
   - $STAFFROOM_HOME/agents.yaml  (operator-curated Staff Room agent list)
-  - $STAFFROOM_HOME/audit/*.jsonl (session-start, tool-call, session-end events
-                                   written by the staffroom-audit plugin)
-  - $HERMES_HOME/state.db        (read-only via mode=ro URI; HERMÉS already
-                                  uses WAL mode so concurrent reads are safe)
+  - $STAFFROOM_HOME/audit/*.jsonl (session-start, tool-call, session-end)
+  - $STAFFROOM_HOME/agent_links.json (which schedules belong to which agent)
+  - $HERMES_HOME/state.db        (read-only via mode=ro URI)
+  - HERMÉS's cron.jobs.create_job (delegation creates real cron jobs)
 """
 from __future__ import annotations
 
@@ -245,6 +254,111 @@ def _handle_agent_summary(arguments: Dict[str, Any], **_kw) -> str:
 
 
 # ---------------------------------------------------------------------------
+# Delegation — write to HERMÉS's cron + the bridge's agent_links index.
+# Both files are JSON; we touch them with the same chmod/atomic-replace
+# pattern the bridge uses. The pause-cascade in apps/bridge keeps working
+# because we write to the same agent_links.json it reads.
+# ---------------------------------------------------------------------------
+def _link_schedule_to_agent(agent_id: str, schedule_id: str) -> None:
+    """Mirror apps.bridge.agent_links.link_schedule from inside the plugin.
+
+    We can't import the bridge module (different Python package), but the
+    file format is intentionally minimal: a dict keyed by agent_id with
+    {schedules, webhooks} lists. Replicating ~5 lines beats coupling the
+    plugin to a separate codebase.
+    """
+    path = _staffroom_home() / "agent_links.json"
+    try:
+        data = json.loads(path.read_text(encoding="utf-8")) if path.exists() else {}
+    except Exception:
+        data = {}
+    if not isinstance(data, dict):
+        data = {}
+    entry = data.setdefault(agent_id, {"schedules": [], "webhooks": []})
+    if schedule_id not in entry["schedules"]:
+        entry["schedules"].append(schedule_id)
+    path.parent.mkdir(parents=True, exist_ok=True)
+    tmp = path.with_suffix(".tmp")
+    tmp.write_text(json.dumps(data, indent=2), encoding="utf-8")
+    try:
+        os.chmod(tmp, 0o600)
+    except OSError:
+        pass
+    os.replace(tmp, path)
+
+
+def _handle_delegate_task(arguments: Dict[str, Any], **_kw) -> str:
+    agent_id = arguments.get("agent_id")
+    prompt = (arguments.get("prompt") or "").strip()
+    when = (arguments.get("when") or "10m").strip()
+    name = (arguments.get("name") or "").strip()
+
+    if not agent_id:
+        return json.dumps({"error": "agent_id is required. Call staffroom_list_agents first if you don't know it."})
+    if not prompt:
+        return json.dumps({"error": "prompt is required — describe what the agent should do, plain English."})
+
+    # Confirm the target agent exists and isn't paused.
+    agents = _load_agents()
+    agent = next((a for a in agents if a.get("id") == agent_id), None)
+    if not agent:
+        return json.dumps({"error": f"No agent with id '{agent_id}' in the Staff Room."})
+    if not agent.get("enabled", True):
+        return json.dumps({
+            "error": f"Agent '{agent.get('name')}' is paused. Resume it from the Agents page before delegating.",
+        })
+
+    try:
+        from cron.jobs import create_job, parse_schedule
+    except ImportError as exc:
+        return json.dumps({"error": f"HERMÉS cron module not available: {exc}"})
+
+    # Validate the schedule string up front so we get a clean error instead
+    # of HERMÉS raising deep in create_job.
+    try:
+        parse_schedule(when)
+    except Exception as exc:
+        return json.dumps({
+            "error": (
+                f"Could not parse the time: {exc}. Use one of: a cron expr "
+                "like '0 9 * * 1-5' (every weekday at 9am), an interval like "
+                "'every 30m', a one-shot delay like '10m' or '2h', or an ISO "
+                "timestamp like '2026-05-21T09:00:00Z'."
+            ),
+        })
+
+    job_name = name or f"Delegation to {agent.get('name')}"
+    try:
+        job = create_job(
+            prompt=prompt,
+            schedule=when,
+            name=job_name,
+            repeat=1,  # default: one-shot; the operator can manually edit for recurring
+            deliver="home",  # output goes to the configured home channel
+            model=agent.get("model") or None,
+            enabled_toolsets=(agent.get("toolsets") or None),
+        )
+    except Exception as exc:
+        return json.dumps({"error": f"HERMÉS rejected the job: {exc}"})
+
+    job_id = job.get("id") if isinstance(job, dict) else None
+    if job_id:
+        try:
+            _link_schedule_to_agent(agent_id, job_id)
+        except Exception as exc:
+            logger.warning("agent_links write failed for %s/%s: %s", agent_id, job_id, exc)
+
+    return json.dumps({
+        "delegated": True,
+        "job_id": job_id,
+        "agent": {"id": agent.get("id"), "name": agent.get("name")},
+        "when": when,
+        "next_run_at": job.get("next_run_at") if isinstance(job, dict) else None,
+        "name": job_name,
+    }, default=str)
+
+
+# ---------------------------------------------------------------------------
 # Schemas (OpenAI-compatible function shapes)
 # ---------------------------------------------------------------------------
 LIST_AGENTS_SCHEMA: Dict[str, Any] = {
@@ -306,11 +420,58 @@ AGENT_SUMMARY_SCHEMA: Dict[str, Any] = {
     },
 }
 
+DELEGATE_TASK_SCHEMA: Dict[str, Any] = {
+    "name": "staffroom_delegate_task",
+    "description": (
+        "Hand a task to a specific agent — either to run soon ('one-shot') "
+        "or on a recurring schedule. Creates a real HERMÉS cron job tied "
+        "to that agent, so pausing the agent later also pauses this task. "
+        "Use when the operator says things like:\n"
+        "  - 'have Captain handle this tomorrow at 9am'\n"
+        "  - 'tell Analyst to review this'\n"
+        "  - 'every weekday morning, get Boss to check inbox'\n"
+        "Confirm the agent exists with staffroom_list_agents first if "
+        "you're unsure which id to use. Output is delivered to the "
+        "operator's home channel (whatever they /sethome'd on Telegram, "
+        "etc.)."
+    ),
+    "parameters": {
+        "type": "object",
+        "properties": {
+            "agent_id": {
+                "type": "string",
+                "description": "The agent id (from staffroom_list_agents).",
+            },
+            "prompt": {
+                "type": "string",
+                "description": "Plain-English instructions for the agent. Be specific.",
+            },
+            "when": {
+                "type": "string",
+                "description": (
+                    "When to run. Accepts: a one-shot delay like '10m' or "
+                    "'2h' (run once, that far from now), a cron expression "
+                    "like '0 9 * * 1-5' (every weekday at 9am), an interval "
+                    "like 'every 30m', or an ISO timestamp like "
+                    "'2026-05-21T09:00:00Z' (run once at that exact time). "
+                    "Defaults to '10m' if omitted."
+                ),
+            },
+            "name": {
+                "type": "string",
+                "description": "Short label for the task (shown in the dashboard's Schedules page).",
+            },
+        },
+        "required": ["agent_id", "prompt"],
+    },
+}
+
 
 _TOOLS = (
     ("staffroom_list_agents", LIST_AGENTS_SCHEMA, _handle_list_agents, "👥"),
     ("staffroom_recent_activity", RECENT_ACTIVITY_SCHEMA, _handle_recent_activity, "📋"),
     ("staffroom_agent_summary", AGENT_SUMMARY_SCHEMA, _handle_agent_summary, "📊"),
+    ("staffroom_delegate_task", DELEGATE_TASK_SCHEMA, _handle_delegate_task, "🤝"),
 )
 
 
