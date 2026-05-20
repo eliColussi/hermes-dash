@@ -34,36 +34,109 @@ export function PendingPairingsBanner() {
     queryKey: ["pending-pairings"],
     queryFn: api.listPendingPairings,
     refetchInterval: 8000,
+    // Don't loud-fail in the console if the bridge can't import HERMÉS —
+    // the manual approval fallback below still works either way.
+    retry: false,
   });
 
   const items = q.data?.items ?? [];
-  if (q.isLoading || items.length === 0) return null;
+  const hasItems = items.length > 0;
+
+  if (q.isLoading) return null;
 
   return (
-    <div className="card p-4 mb-4 border-accent/40 bg-accent-soft/40">
-      <div className="flex items-center gap-2 mb-3">
-        <UserPlus className="w-4 h-4 text-accent" />
-        <span className="text-sm font-medium">
-          {items.length === 1
-            ? "Someone is trying to talk to your bot"
-            : `${items.length} people are trying to talk to your bot`}
-        </span>
+    <div className="mb-4">
+      {hasItems && (
+        <div className="card p-4 border-accent/40 bg-accent-soft/40 mb-2">
+          <div className="flex items-center gap-2 mb-3">
+            <UserPlus className="w-4 h-4 text-accent" />
+            <span className="text-sm font-medium">
+              {items.length === 1
+                ? "Someone is trying to talk to your bot"
+                : `${items.length} people are trying to talk to your bot`}
+            </span>
+          </div>
+          <div className="space-y-2">
+            {items.map((p) => (
+              <PendingRow
+                key={`${p.platform}-${p.code}`}
+                p={p}
+                onApproved={() =>
+                  qc.invalidateQueries({ queryKey: ["pending-pairings"] })
+                }
+              />
+            ))}
+          </div>
+          <p className="text-[11px] text-muted mt-3">
+            Bots only respond to people you&apos;ve approved. Anyone else gets a
+            pairing code in their first message and has to wait here.
+          </p>
+        </div>
+      )}
+      <ManualApproveCard />
+    </div>
+  );
+}
+
+// Manual fallback: paste a code from the bot's message directly. Works even
+// when the listing endpoint is empty / unreachable, which is the situation
+// the operator is in if their gateway issued a code but the bridge can't
+// read it back for any reason. Bypasses the "show me what's pending" step
+// entirely.
+function ManualApproveCard() {
+  const qc = useQueryClient();
+  const [platform, setPlatform] = useState("telegram");
+  const [code, setCode] = useState("");
+  const [okMsg, setOkMsg] = useState<string | null>(null);
+  const approve = useMutation({
+    mutationFn: () => api.approvePairing(platform, code),
+    onSuccess: (res) => {
+      setOkMsg(`Approved ${res.user_name || res.user_id} on ${platform}.`);
+      setCode("");
+      qc.invalidateQueries({ queryKey: ["pending-pairings"] });
+    },
+  });
+
+  return (
+    <div className="card p-4 flex flex-col gap-2">
+      <div className="text-[11px] text-muted">
+        Got a pairing code from your bot? Paste it here to approve.
       </div>
-      <div className="space-y-2">
-        {items.map((p) => (
-          <PendingRow
-            key={`${p.platform}-${p.code}`}
-            p={p}
-            onApproved={() =>
-              qc.invalidateQueries({ queryKey: ["pending-pairings"] })
-            }
-          />
-        ))}
+      <div className="flex gap-2">
+        <select
+          value={platform}
+          onChange={(e) => setPlatform(e.target.value)}
+          className="px-2 py-1.5 text-xs rounded-lg border border-line bg-[var(--bg)]"
+        >
+          {Object.keys(PLATFORM_ICONS).map((p) => (
+            <option key={p} value={p}>
+              {p}
+            </option>
+          ))}
+        </select>
+        <input
+          value={code}
+          onChange={(e) => setCode(e.target.value.toUpperCase().trim())}
+          placeholder="e.g. WDUK52WP"
+          className="flex-1 px-2 py-1.5 text-xs font-mono rounded-lg border border-line bg-[var(--bg)] uppercase"
+          maxLength={20}
+          autoCapitalize="characters"
+          spellCheck={false}
+        />
+        <button
+          onClick={() => approve.mutate()}
+          disabled={approve.isPending || code.length < 4}
+          className="btn-primary text-xs px-3 py-1.5 disabled:opacity-50"
+        >
+          {approve.isPending ? "Approving…" : "Approve"}
+        </button>
       </div>
-      <p className="text-[11px] text-muted mt-3">
-        Bots only respond to people you&apos;ve approved. Anyone else gets a
-        pairing code in their first message and has to wait here.
-      </p>
+      {okMsg && <div className="text-[11px] text-ok">{okMsg}</div>}
+      {approve.error && (
+        <div className="text-[11px] text-red-600">
+          {(approve.error as Error).message}
+        </div>
+      )}
     </div>
   );
 }
