@@ -1,0 +1,12 @@
+name: staffroom-introspect
+version: 0.1.0
+description: "Lets the channel agent (the bot that talks to operators on Telegram/Slack/etc.) see what's happening across the Staff Room — what agents exist, what they've done today, and per-agent activity summaries. Read-only, no auth required, talks directly to agents.yaml + audit log + state.db."
+author: Staff Room OS
+kind: standalone
+platforms:
+  - linux
+  - macos
+provides_tools:
+  - staffroom_list_agents
+  - staffroom_recent_activity
+  - staffroom_agent_summary

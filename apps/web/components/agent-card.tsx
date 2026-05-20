@@ -1,6 +1,7 @@
 "use client";
 
-import { MoreHorizontal, Play, Square, Trash2 } from "lucide-react";
+import { useQuery } from "@tanstack/react-query";
+import { MessageSquare, MoreHorizontal, Play, Square, Trash2 } from "lucide-react";
 import { useState } from "react";
 import { Agent, api } from "@/lib/api";
 import { cn } from "@/lib/cn";
@@ -9,6 +10,14 @@ import { EditAgentButton } from "@/components/add-agent";
 export function AgentCard({ agent, onChange }: { agent: Agent; onChange: () => void }) {
   const [busy, setBusy] = useState(false);
   const [menu, setMenu] = useState(false);
+
+  // Highlight which agent is the current chat-channel voice so operators can
+  // see at a glance who their bot speaks as on Telegram/Slack/etc.
+  const channelQ = useQuery({
+    queryKey: ["channel-agent"],
+    queryFn: api.getChannelAgent,
+  });
+  const isChannelAgent = channelQ.data?.agent_id === agent.id;
 
   async function toggle() {
     // When pausing, warn the operator that this also stops the agent's
@@ -38,6 +47,24 @@ export function AgentCard({ agent, onChange }: { agent: Agent; onChange: () => v
     onChange();
   }
 
+  async function setAsChannelVoice() {
+    setBusy(true);
+    try {
+      await api.setChannelAgent(agent.id);
+      onChange();
+      channelQ.refetch();
+      alert(
+        `${agent.name} is now the voice on every chat channel. ` +
+        `Restart the messaging service from /connections for the change to take effect.`,
+      );
+    } catch (e) {
+      alert(`Failed to set channel voice: ${(e as Error).message}`);
+    } finally {
+      setBusy(false);
+      setMenu(false);
+    }
+  }
+
   return (
     <div className="card p-5 flex flex-col gap-3 relative">
       <div className="flex items-start justify-between">
@@ -63,7 +90,16 @@ export function AgentCard({ agent, onChange }: { agent: Agent; onChange: () => v
           </button>
         </div>
         {menu && (
-          <div className="absolute right-3 top-12 z-10 card py-1 min-w-[140px] shadow-lg">
+          <div className="absolute right-3 top-12 z-10 card py-1 min-w-[180px] shadow-lg">
+            {!isChannelAgent && (
+              <button
+                onClick={setAsChannelVoice}
+                disabled={busy}
+                className="w-full flex items-center gap-2 px-3 py-2 text-sm hover:bg-surface-3 disabled:opacity-50"
+              >
+                <MessageSquare className="w-3.5 h-3.5" /> Set as channel voice
+              </button>
+            )}
             <button
               onClick={remove}
               className="w-full flex items-center gap-2 px-3 py-2 text-sm text-bad hover:bg-surface-3"
@@ -80,6 +116,14 @@ export function AgentCard({ agent, onChange }: { agent: Agent; onChange: () => v
 
       <div className="flex items-center gap-1.5 flex-wrap">
         <span className="chip">{agent.organization}</span>
+        {isChannelAgent && (
+          <span
+            className="chip chip-accent flex items-center gap-1"
+            title="This agent's system prompt is the one HERMÉS uses on every chat platform (Telegram / Slack / Discord / Mattermost / Email)"
+          >
+            <MessageSquare className="w-3 h-3" /> Channel voice
+          </span>
+        )}
         {(agent.toolsets ?? []).map((t) => (
           <span key={t} className="chip chip-accent font-mono" title="Tool">
             {t}
