@@ -2,13 +2,16 @@
 from __future__ import annotations
 
 import json
+import re
 from datetime import datetime
 from typing import Optional
 
-from fastapi import APIRouter, Depends, Query
+from fastapi import APIRouter, Depends, HTTPException, Query
 
 from .. import auth
 from ..config import STAFFROOM_HOME
+
+_DATE_RE = re.compile(r"^\d{4}-\d{2}-\d{2}$")
 
 router = APIRouter(
     prefix="/api/audit",
@@ -46,6 +49,12 @@ def list_audit(
     event: Optional[str] = Query(None, description="Filter to one event type."),
 ) -> dict:
     day = date or datetime.utcnow().strftime("%Y-%m-%d")
+    # Reject anything that isn't a strict YYYY-MM-DD — without this an
+    # attacker could pass "../../../etc/passwd" (or any other relative path
+    # ending in .jsonl after our suffix) and read arbitrary files on the
+    # volume that happen to be JSONL.
+    if not _DATE_RE.match(day):
+        raise HTTPException(400, "date must be in YYYY-MM-DD format")
     items = _read_jsonl(day, limit * 4 if event else limit)
     if event:
         items = [e for e in items if e.get("event") == event][-limit:]

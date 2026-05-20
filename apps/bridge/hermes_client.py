@@ -129,6 +129,12 @@ def save_agents(agents: list[dict[str, Any]]) -> None:
     payload = {"agents": agents}
     with STAFFROOM_AGENTS_YAML.open("w") as f:
         _yaml.dump(payload, f)
+    # System prompts can encode operator IP or sensitive instructions; lock
+    # the file down so a future non-root co-process can't read it.
+    try:
+        os.chmod(STAFFROOM_AGENTS_YAML, 0o600)
+    except OSError:
+        pass
 
 
 def seed_default_agents() -> None:

@@ -36,6 +36,10 @@ def _save(data: dict) -> None:
     _LINKS_FILE.parent.mkdir(parents=True, exist_ok=True)
     tmp = _LINKS_FILE.with_suffix(".tmp")
     tmp.write_text(json.dumps(data, indent=2), encoding="utf-8")
+    try:
+        os.chmod(tmp, 0o600)
+    except OSError:
+        pass
     os.replace(tmp, _LINKS_FILE)
 
 

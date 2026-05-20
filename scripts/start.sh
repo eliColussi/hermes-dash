@@ -167,6 +167,15 @@ if [ -z "${STAFFROOM_ADMIN_PASSWORD:-}" ]; then
   echo ""
 fi
 
+# Auto-derive PUBLIC_BASE_URL from Railway's injected domain so the webhook
+# router can construct working URLs without needing the operator to hard-code
+# anything. The router now refuses to trust X-Forwarded-* headers blindly, so
+# we set this explicitly for the trusted hosting path.
+if [ -z "${PUBLIC_BASE_URL:-}" ] && [ -n "${RAILWAY_PUBLIC_DOMAIN:-}" ]; then
+  export PUBLIC_BASE_URL="https://${RAILWAY_PUBLIC_DOMAIN}"
+  echo "[start] PUBLIC_BASE_URL = $PUBLIC_BASE_URL (from RAILWAY_PUBLIC_DOMAIN)"
+fi
+
 # Bridge runs on a fixed internal port; not exposed externally.
 echo "[start] launching bridge on 127.0.0.1:8787"
 cd /app

@@ -51,6 +51,13 @@ def _save_subs(subs: dict) -> None:
     _SUBS_FILE.parent.mkdir(parents=True, exist_ok=True)
     tmp = _SUBS_FILE.with_suffix(".tmp")
     tmp.write_text(json.dumps(subs, indent=2, ensure_ascii=False), encoding="utf-8")
+    # File contains every webhook's HMAC secret in plaintext. Lock to 0600
+    # before the atomic rename so it never exists at the destination path
+    # with looser permissions, even briefly.
+    try:
+        os.chmod(tmp, 0o600)
+    except OSError:
+        pass
     os.replace(tmp, _SUBS_FILE)
 
 
@@ -63,13 +70,27 @@ def _mask(value: str) -> str:
 
 
 def _public_base_url(request: Request) -> str:
+    """Resolve the public base URL the operator should paste into Stripe etc.
+
+    Priority:
+      1. PUBLIC_BASE_URL env var — the safe path. start.sh auto-sets this
+         from RAILWAY_PUBLIC_DOMAIN on Railway, so zero-config deploys still
+         work.
+      2. X-Forwarded-Host / Host header — only honored when
+         STAFFROOM_TRUST_PROXY=yes is explicitly set. Without that flag we
+         refuse to construct a URL from request headers, because an attacker
+         with a valid session could otherwise poison the displayed URL via
+         a forged header and trick an admin into pasting attacker.com into
+         a third-party webhook config.
+    """
     explicit = os.environ.get("PUBLIC_BASE_URL")
     if explicit:
         return explicit.rstrip("/")
-    forwarded_host = request.headers.get("x-forwarded-host") or request.headers.get("host", "")
-    forwarded_proto = request.headers.get("x-forwarded-proto", "https")
-    if forwarded_host:
-        return f"{forwarded_proto}://{forwarded_host}"
+    if os.environ.get("STAFFROOM_TRUST_PROXY") == "yes":
+        forwarded_host = request.headers.get("x-forwarded-host") or request.headers.get("host", "")
+        forwarded_proto = request.headers.get("x-forwarded-proto", "https")
+        if forwarded_host:
+            return f"{forwarded_proto}://{forwarded_host}"
     return ""
 
 

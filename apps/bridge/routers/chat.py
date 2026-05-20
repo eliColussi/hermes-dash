@@ -63,6 +63,10 @@ def _save_threads(threads: list[dict]) -> None:
     _THREADS_FILE.parent.mkdir(parents=True, exist_ok=True)
     tmp = _THREADS_FILE.with_suffix(".tmp")
     tmp.write_text(json.dumps({"threads": threads}, indent=2), encoding="utf-8")
+    try:
+        os.chmod(tmp, 0o600)
+    except OSError:
+        pass
     os.replace(tmp, _THREADS_FILE)
 
 

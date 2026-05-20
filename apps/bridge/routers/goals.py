@@ -62,6 +62,10 @@ def _save(goals: List[dict]) -> None:
     _GOALS_FILE.parent.mkdir(parents=True, exist_ok=True)
     tmp = _GOALS_FILE.with_suffix(".tmp")
     tmp.write_text(json.dumps(goals, indent=2, ensure_ascii=False), encoding="utf-8")
+    try:
+        os.chmod(tmp, 0o600)
+    except OSError:
+        pass
     os.replace(tmp, _GOALS_FILE)
 
 
