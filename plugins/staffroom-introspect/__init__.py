@@ -315,10 +315,39 @@ _TOOLS = (
 
 
 def _check_introspect() -> bool:
-    """Plugin is healthy as long as agents.yaml exists. The audit log and
-    state.db may be empty on a fresh install — that's fine, the tools
-    return helpful 'no data yet' shapes rather than failing."""
-    return _agents_yaml_path().exists()
+    """Always healthy — file-based, no API keys, no daemons. Tools handle
+    missing data gracefully (return empty lists with a 'note' explaining why).
+    Returning True unconditionally avoids the case where the gateway boots
+    before agents.yaml exists and silently disables introspection forever."""
+    return True
+
+
+def _safe(handler):
+    """Wrap a tool handler so unexpected exceptions become a structured JSON
+    error returned TO the model (visible in the audit log + telegram reply)
+    instead of being swallowed as a generic 'tool errored'. Lets Boss tell
+    the operator what's actually broken, and gives us a real diagnostic to
+    fix it the next time."""
+    import functools, traceback as _tb
+
+    @functools.wraps(handler)
+    def wrapped(arguments):
+        try:
+            return handler(arguments)
+        except Exception as exc:
+            logger.exception("staffroom-introspect handler %s failed", handler.__name__)
+            return json.dumps({
+                "error": f"{exc.__class__.__name__}: {exc}",
+                "trace": _tb.format_exc().splitlines()[-5:],
+                "paths": {
+                    "STAFFROOM_HOME": str(_staffroom_home()),
+                    "HERMES_HOME": str(_hermes_home()),
+                    "agents_yaml_exists": _agents_yaml_path().exists(),
+                    "audit_dir_exists": _audit_dir().exists(),
+                    "state_db_exists": _state_db_path().exists(),
+                },
+            })
+    return wrapped
 
 
 def register(ctx) -> None:
@@ -328,7 +357,7 @@ def register(ctx) -> None:
             name=name,
             toolset="staffroom",
             schema=schema,
-            handler=handler,
+            handler=_safe(handler),
             check_fn=_check_introspect,
             emoji=emoji,
         )

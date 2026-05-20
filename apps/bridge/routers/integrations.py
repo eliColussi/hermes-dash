@@ -514,6 +514,53 @@ def approve_pairing(payload: PairingApprovePayload) -> dict:
     return {"approved": True, **result}
 
 
+@router.get("/introspect-debug")
+def introspect_debug() -> dict:
+    """Mirror what the staffroom-introspect plugin sees, but from the bridge.
+
+    Useful for diagnosing 'why is Boss saying my tool errored?' — the bridge
+    runs the same loaders the plugin uses (file paths, audit JSONL, state.db)
+    and reports what each one returned. If this endpoint works but the bot
+    still errors, the bug is in HERMÉS's plugin loading, not the data layer."""
+    import importlib.util, traceback as _tb
+    out: dict = {"paths": {}, "results": {}}
+    try:
+        plugin_path = Path(__file__).resolve().parent.parent.parent.parent / "plugins" / "staffroom-introspect" / "__init__.py"
+        out["paths"]["plugin_file"] = str(plugin_path)
+        out["paths"]["plugin_exists"] = plugin_path.exists()
+        if not plugin_path.exists():
+            return out
+        spec = importlib.util.spec_from_file_location("staffroom_introspect_debug", plugin_path)
+        mod = importlib.util.module_from_spec(spec)
+        spec.loader.exec_module(mod)
+        out["paths"].update({
+            "STAFFROOM_HOME": str(mod._staffroom_home()),
+            "HERMES_HOME": str(mod._hermes_home()),
+            "agents_yaml": str(mod._agents_yaml_path()),
+            "agents_yaml_exists": mod._agents_yaml_path().exists(),
+            "audit_dir": str(mod._audit_dir()),
+            "audit_dir_exists": mod._audit_dir().exists(),
+            "state_db": str(mod._state_db_path()),
+            "state_db_exists": mod._state_db_path().exists(),
+        })
+        # Run each handler with empty args and capture outcome.
+        for tool_name, _, handler, _ in mod._TOOLS:
+            try:
+                result = handler({})
+                # Tools return JSON strings — re-parse so the response is readable.
+                import json as _j
+                out["results"][tool_name] = _j.loads(result)
+            except Exception as exc:
+                out["results"][tool_name] = {
+                    "error": f"{exc.__class__.__name__}: {exc}",
+                    "trace": _tb.format_exc().splitlines()[-5:],
+                }
+    except Exception as exc:
+        out["fatal_error"] = f"{exc.__class__.__name__}: {exc}"
+        out["fatal_trace"] = _tb.format_exc().splitlines()[-10:]
+    return out
+
+
 @router.post("/pairing/dismiss")
 def dismiss_pairing(payload: PairingApprovePayload) -> dict:
     """Drop a pending pairing code without approving it. Useful when an old
