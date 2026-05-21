@@ -10,3 +10,8 @@ __pycache__/
 dist/
 build/
 *.egg-info/
+
+# Internal-only documents (SOPs, sales playbooks, client lists, runbooks).
+# Never committed — these reference real client data, pricing, and
+# operational details that don't belong on a public repo.
+internal/
