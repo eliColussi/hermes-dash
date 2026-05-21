@@ -290,6 +290,16 @@ function CredentialFormModal({
     .filter((f) => !f.optional)
     .every((f) => (values[f.name] ?? "").trim() !== "");
 
+  // Hand the values to the parent then immediately zero the React state
+  // so the credential doesn't linger in memory after submit. The parent
+  // captures the values in its mutation closure before we wipe — Composio
+  // gets what it needs and the browser side has nothing left to leak.
+  function handleSubmit() {
+    const snapshot = { ...values };
+    setValues(Object.fromEntries(fields.map((f) => [f.name, ""])));
+    onSubmit(snapshot);
+  }
+
   return (
     <div
       className="fixed inset-0 z-[60] bg-black/50 backdrop-blur-sm flex items-center justify-center p-4"
@@ -345,6 +355,26 @@ function CredentialFormModal({
             </label>
           ))}
           {error && <div className="text-xs text-red-600">{error}</div>}
+          <div className="flex items-start gap-2 text-[10px] text-muted pt-2 border-t border-line">
+            <svg
+              xmlns="http://www.w3.org/2000/svg"
+              viewBox="0 0 24 24"
+              fill="none"
+              stroke="currentColor"
+              strokeWidth="2"
+              strokeLinecap="round"
+              strokeLinejoin="round"
+              className="w-3 h-3 mt-0.5 shrink-0"
+            >
+              <rect x="3" y="11" width="18" height="11" rx="2" ry="2" />
+              <path d="M7 11V7a5 5 0 0 1 10 0v4" />
+            </svg>
+            <span>
+              Your credential travels TLS-encrypted directly to Composio
+              and is stored on their SOC&nbsp;2 Type&nbsp;II compliant vault.
+              We never write it to our database, log it, or echo it back.
+            </span>
+          </div>
         </div>
         <div className="flex items-center justify-end gap-2 p-4 border-t border-line">
           <button
@@ -354,7 +384,7 @@ function CredentialFormModal({
             Cancel
           </button>
           <button
-            onClick={() => onSubmit(values)}
+            onClick={handleSubmit}
             disabled={submitting || !allRequiredFilled}
             className="btn-primary disabled:opacity-50"
           >

@@ -5,12 +5,18 @@ link), but the dashboard sees a single "Connect" button per toolkit.
 """
 from __future__ import annotations
 
+import json
+import os
+import time
+from datetime import datetime
+from pathlib import Path
 from typing import Optional
 
 from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel
 
 from .. import auth, composio_link as cc
+from ..config import STAFFROOM_HOME
 
 router = APIRouter(
     prefix="/api/composio",
@@ -218,6 +224,50 @@ def auth_schemes(toolkit: str) -> dict:
     }
 
 
+def _sanitize_error(msg: str, secrets: Optional[dict]) -> str:
+    """Strip any credential values out of an error string before returning
+    it to the dashboard. Defense in depth: if Composio's exception happens
+    to echo back the bad credential the operator just pasted, this stops
+    it from leaking back to the browser (and from there into a screenshot,
+    DevTools history, or an angry support ticket)."""
+    if not secrets:
+        return msg
+    out = msg
+    for v in secrets.values():
+        if not v or not isinstance(v, str) or len(v) < 4:
+            continue
+        out = out.replace(v, "***")
+    return out
+
+
+def _audit_connect(toolkit: str, auth_scheme: Optional[str], status: str) -> None:
+    """Append a bridge-side audit entry recording the attempt. Never
+    includes credential values — just metadata. Same JSONL the dashboard's
+    Activity page already reads, so credential events appear alongside
+    agent / session events for the operator's security audit trail."""
+    try:
+        audit_dir = STAFFROOM_HOME / "audit"
+        audit_dir.mkdir(parents=True, exist_ok=True)
+        path = audit_dir / f"{datetime.utcnow():%Y-%m-%d}.jsonl"
+        entry = {
+            "ts": datetime.utcnow().isoformat() + "Z",
+            "event": "composio_connect",
+            "toolkit": toolkit,
+            "auth_scheme": auth_scheme or "managed_oauth",
+            "status": status,  # "ok" | "error"
+        }
+        with path.open("a", encoding="utf-8") as f:
+            f.write(json.dumps(entry) + "\n")
+        try:
+            os.chmod(path, 0o600)
+        except OSError:
+            pass
+    except Exception:
+        # Never block a connect on audit failure — log to stderr instead.
+        import logging
+        logging.getLogger(__name__).warning("audit write failed", exc_info=True)
+
+
 @router.post("/connect")
 def connect(req: ConnectRequest) -> dict:
     """Initiate a connection.
@@ -256,7 +306,13 @@ def connect(req: ConnectRequest) -> dict:
                 callback_url=req.callback_url,
             )
     except Exception as exc:
-        raise HTTPException(502, f"Composio API error: {type(exc).__name__}: {exc}")
+        _audit_connect(req.toolkit, req.auth_scheme, "error")
+        # Strip credential values from any error string Composio echoes —
+        # defense against the unlikely case where their server returns the
+        # bad token in its response body.
+        raw = f"Composio API error: {type(exc).__name__}: {exc}"
+        raise HTTPException(502, _sanitize_error(raw, req.credentials))
+    _audit_connect(req.toolkit, req.auth_scheme, "ok")
     return {
         "toolkit": req.toolkit,
         "redirect_url": getattr(connection_req, "redirect_url", None),
