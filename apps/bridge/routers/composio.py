@@ -172,7 +172,10 @@ def auth_schemes(toolkit: str) -> dict:
     """
     client = _require_client()
     try:
-        tk = client.toolkits.retrieve(toolkit)
+        # The high-level SDK uses .get(slug=...) — it wraps the low-level
+        # toolkits.retrieve() under the hood. .retrieve() doesn't exist on
+        # the Toolkits proxy class itself.
+        tk = client.toolkits.get(slug=toolkit)
     except Exception as exc:
         raise HTTPException(502, f"Composio API error: {type(exc).__name__}: {exc}")
 
