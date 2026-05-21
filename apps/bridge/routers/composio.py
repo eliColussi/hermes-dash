@@ -177,6 +177,12 @@ def auth_schemes(toolkit: str) -> dict:
         raise HTTPException(502, f"Composio API error: {type(exc).__name__}: {exc}")
 
     managed = list(getattr(tk, "composio_managed_auth_schemes", None) or [])
+    # "managed OAuth available" means the user can connect in ONE click
+    # because Composio supplies the OAuth credentials. Other managed
+    # schemes (API_KEY, BEARER_TOKEN, BASIC) are still "managed" by Composio
+    # but the user has to bring the credential themselves — those need
+    # the credential form, not the popup.
+    managed_oauth = any(s in managed for s in ("OAUTH2", "OAUTH1"))
     schemes: list[dict] = []
     for detail in (getattr(tk, "auth_config_details", None) or []):
         mode = (getattr(detail, "mode", "") or "").upper()
@@ -203,7 +209,7 @@ def auth_schemes(toolkit: str) -> dict:
         })
     return {
         "toolkit": toolkit,
-        "managed_oauth": bool(managed),
+        "managed_oauth": managed_oauth,
         "managed_schemes": managed,
         "schemes": schemes,
     }

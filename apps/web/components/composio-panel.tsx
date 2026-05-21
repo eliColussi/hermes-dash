@@ -39,56 +39,94 @@ export function ComposioPanel() {
     fields: ComposioAuthField[];
     authHintUrl: string | null;
   } | null>(null);
+  // Last connect-attempt error. Shown inline on the picker — alert() was
+  // unreliable on Mac Safari/Chrome (flashed and dismissed before operators
+  // could read it).
+  const [lastError, setLastError] = useState<{ slug: string; message: string } | null>(null);
+  const [busySlug, setBusySlug] = useState<string | null>(null);
+
+  // Pick the best credential scheme from a list — prefer fewest required
+  // fields so operators see the simplest path. Used both for the
+  // "non-OAuth" branch and the OAuth-fallback branch below.
+  function pickBestScheme(schemes: { mode: string; name: string; fields: ComposioAuthField[]; auth_hint_url: string | null }[]) {
+    const sorted = [...schemes].sort(
+      (a, b) =>
+        a.fields.filter((f) => !f.optional).length -
+        b.fields.filter((f) => !f.optional).length,
+    );
+    return sorted[0] ?? null;
+  }
 
   // Start a connection. Decides between the one-click OAuth popup and the
   // credential-form modal by asking the bridge what the toolkit needs.
   // Opens about:blank SYNCHRONOUSLY so the browser doesn't block the popup
-  // — that's the old bug; window.open after the fetch resolves was getting
-  // killed by Chrome/Safari's popup blocker.
+  // — async window.open after the fetch resolves gets killed by Chrome/
+  // Safari's popup blocker.
   async function startConnect(slug: string) {
+    setLastError(null);
+    setBusySlug(slug);
     const popup = window.open("about:blank", "_blank");
     try {
       const info = await composio.authSchemes(slug);
-      if (info.managed_oauth) {
-        const resp = await composio.connect(slug);
-        if (popup && resp.redirect_url) {
-          popup.location.href = resp.redirect_url;
-        } else {
-          popup?.close();
+      // Helper to fall through to the credential form whenever the OAuth
+      // path can't actually complete. Composio sometimes lists schemes as
+      // "managed" for the catalog but still requires custom credentials in
+      // practice — we discover this only when the connect call returns no
+      // redirect_url.
+      const showCredForm = () => {
+        const best = pickBestScheme(info.schemes || []);
+        if (!best) {
+          throw new Error(
+            `${slug} uses an authentication method we don't support yet (likely service accounts or enterprise SSO). Send your team a message.`,
+          );
         }
-        setTimeout(
-          () => qc.invalidateQueries({ queryKey: ["composio-connections"] }),
-          2000,
-        );
+        setCredForm({
+          slug,
+          schemeName: best.name,
+          authScheme: best.mode,
+          fields: best.fields,
+          authHintUrl: best.auth_hint_url,
+        });
+      };
+
+      if (info.managed_oauth) {
+        // Try the one-click OAuth path. If Composio rejects it (502) OR
+        // returns no redirect_url, fall through to the credential form so
+        // the operator sees something actionable instead of nothing.
+        let resp: { redirect_url: string | null; connection_id: string } | null = null;
+        try {
+          resp = await composio.connect(slug);
+        } catch (oauthErr) {
+          // eslint-disable-next-line no-console
+          console.error("composio managed-OAuth connect failed:", oauthErr);
+          popup?.close();
+          showCredForm();
+          return;
+        }
+        if (popup && resp?.redirect_url) {
+          popup.location.href = resp.redirect_url;
+          setTimeout(
+            () => qc.invalidateQueries({ queryKey: ["composio-connections"] }),
+            2000,
+          );
+          return;
+        }
+        // OAuth said yes but gave us nothing to redirect to — treat as
+        // requiring credentials.
+        popup?.close();
+        showCredForm();
         return;
       }
       // Non-OAuth — close the placeholder tab and show the credential form.
       popup?.close();
-      // Find the scheme with the fewest required fields. Composio sometimes
-      // returns multiple (e.g. both API_KEY and BASIC); operators want the
-      // simplest path.
-      const sortedSchemes = [...(info.schemes || [])].sort(
-        (a, b) =>
-          a.fields.filter((f) => !f.optional).length -
-          b.fields.filter((f) => !f.optional).length,
-      );
-      const best = sortedSchemes[0];
-      if (!best) {
-        alert(
-          `Sorry — "${slug}" uses an authentication method we don't support yet (likely service accounts or enterprise SSO). Send your team a message.`,
-        );
-        return;
-      }
-      setCredForm({
-        slug,
-        schemeName: best.name,
-        authScheme: best.mode,
-        fields: best.fields,
-        authHintUrl: best.auth_hint_url,
-      });
+      showCredForm();
     } catch (err) {
       popup?.close();
-      alert(`Couldn't start connection: ${(err as Error).message}`);
+      // eslint-disable-next-line no-console
+      console.error("composio startConnect failed:", err);
+      setLastError({ slug, message: (err as Error).message || String(err) });
+    } finally {
+      setBusySlug(null);
     }
   }
 
@@ -192,7 +230,8 @@ export function ComposioPanel() {
         <ToolkitPicker
           toolkits={toolkits.data?.items ?? []}
           loading={toolkits.isLoading}
-          connecting={null}
+          connecting={busySlug}
+          lastError={lastError}
           onClose={() => setPicker(false)}
           onConnect={(slug) => {
             // We don't close the picker — startConnect either opens the OAuth
@@ -331,6 +370,7 @@ function ToolkitPicker({
   toolkits,
   loading,
   connecting,
+  lastError,
   connectedSlugs,
   onConnect,
   onClose,
@@ -338,6 +378,7 @@ function ToolkitPicker({
   toolkits: ComposioToolkit[];
   loading: boolean;
   connecting: string | null;
+  lastError: { slug: string; message: string } | null;
   connectedSlugs: Set<string>;
   onConnect: (slug: string) => void;
   onClose: () => void;
@@ -384,6 +425,11 @@ function ToolkitPicker({
           </button>
         </div>
 
+        {lastError && (
+          <div className="mx-4 mt-4 p-3 rounded-lg border border-red-200 bg-red-50 dark:border-red-900/40 dark:bg-red-950/30 text-xs text-red-700 dark:text-red-300">
+            <strong className="capitalize">{lastError.slug}</strong>: {lastError.message}
+          </div>
+        )}
         <div className="p-4 border-b border-line">
           <input
             value={search}
