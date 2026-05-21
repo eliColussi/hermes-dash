@@ -202,6 +202,7 @@ export interface SettingsView {
   token_fingerprint: string;
   auth_disabled: boolean;
   persistence?: { persistent: boolean | null };
+  hermes_version?: { sha: string; date: string; tag?: string; branch?: string; repo?: string };
   env: Record<string, string>;
 }
 

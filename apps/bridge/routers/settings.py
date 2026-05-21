@@ -11,9 +11,29 @@ from fastapi import APIRouter, Depends
 from fastapi.responses import StreamingResponse
 
 from .. import auth, persistence
-from ..config import HERMES_HOME, STAFFROOM_HOME
+from ..config import HERMES_HOME, STAFFROOM_HOME, VENDOR_HERMES
 
 router = APIRouter(prefix="/api/settings", tags=["settings"], dependencies=[Depends(auth.require_token)])
+
+
+def _hermes_version() -> dict:
+    """Read the vendored HERMÉS pin so the dashboard can show 'which
+    version are we running' at a glance. Survives missing files quietly
+    on fresh installs."""
+    pin = VENDOR_HERMES / ".upstream-sha"
+    info: dict[str, str] = {"sha": "unknown", "date": "unknown", "tag": ""}
+    if pin.exists():
+        try:
+            for line in pin.read_text(encoding="utf-8").splitlines():
+                line = line.strip()
+                if not line or line.startswith("#"):
+                    continue
+                for key in ("sha", "date", "tag", "branch", "repo"):
+                    if line.startswith(f"{key}:"):
+                        info[key] = line.split(":", 1)[1].strip()
+        except OSError:
+            pass
+    return info
 
 
 @router.get("")
@@ -25,6 +45,7 @@ def get_settings() -> dict:
         "token_fingerprint": auth.token_fingerprint(),
         "auth_disabled": auth.is_disabled(),
         "persistence": persistence.status(),
+        "hermes_version": _hermes_version(),
         "env": {
             "STAFFROOM_AUTH_TOKEN": "set" if os.environ.get("STAFFROOM_AUTH_TOKEN") else "unset",
         },

@@ -106,6 +106,26 @@ export default function SettingsPage() {
         ))}
       </div>
 
+      {s?.hermes_version && (
+        <div className="card p-5 mb-4">
+          <div className="text-sm font-medium mb-1">HERMÉS runtime</div>
+          <p className="text-xs text-muted mb-3">
+            Which commit of the upstream agent this deploy is pinned to. Bump
+            with <code className="font-mono">scripts/upstream-sync.sh</code>.
+          </p>
+          <Row
+            label="commit"
+            value={
+              s.hermes_version.sha === "unknown"
+                ? "unknown (pre-tooling snapshot)"
+                : s.hermes_version.sha.slice(0, 12)
+            }
+          />
+          <Row label="synced" value={s.hermes_version.date} />
+          {s.hermes_version.tag && <Row label="tag" value={s.hermes_version.tag} />}
+        </div>
+      )}
+
       <BackupCard />
 
       <ClaudeCodeBridge />

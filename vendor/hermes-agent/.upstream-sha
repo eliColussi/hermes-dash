@@ -1,0 +1,26 @@
+# HERMÉS upstream pin
+#
+# This file records exactly which commit of NousResearch/hermes-agent the
+# vendored copy in this directory was synced from. It exists so:
+#   1. /api/settings can surface "hermes_version" to the dashboard
+#   2. scripts/upstream-sync.sh can diff our copy against upstream cleanly
+#   3. you can answer "is this client running the buggy version?" in the field
+#
+# Update this file whenever you sync. The sync script does it for you.
+#
+# Fields:
+#   repo:    upstream git URL
+#   sha:     commit hash this snapshot was taken from (unknown if pre-tooling)
+#   date:    ISO date of the sync (when you pulled)
+#   tag:     human-readable tag/version if HERMÉS released one
+#   notes:   optional — what you reviewed and decided not to take, etc.
+
+repo: https://github.com/NousResearch/hermes-agent
+sha: unknown
+date: 2026-05-20
+tag: vendored-pre-tooling
+notes: |
+  Pre-tooling snapshot. The vendored tree was copied before the sync script
+  existed, so we don't have a SHA. Next time scripts/upstream-sync.sh runs
+  it will record the current upstream HEAD here and let you diff forward
+  from there.
