@@ -22,6 +22,12 @@ router = APIRouter(
 class ConnectRequest(BaseModel):
     toolkit: str
     callback_url: Optional[str] = None
+    # When the toolkit needs user-supplied credentials (API key, bearer
+    # token, basic auth, etc.) the dashboard collects them via a form and
+    # posts them here. Omit for managed-OAuth toolkits — the original flow
+    # still works for those.
+    auth_scheme: Optional[str] = None  # "OAUTH2" | "API_KEY" | "BEARER_TOKEN" | "BASIC" | ...
+    credentials: Optional[dict] = None
 
 
 def _require_client():
@@ -59,6 +65,21 @@ def _create_managed_auth_config(client, toolkit: str) -> str:
     resp = client.auth_configs.create(
         toolkit=toolkit,
         options={"type": "use_composio_managed_auth"},
+    )
+    return getattr(resp, "id")
+
+
+def _create_custom_auth_config(client, toolkit: str, scheme: str) -> str:
+    """Create a non-managed auth_config for API-key / bearer / basic auth.
+
+    Used when Composio doesn't supply OAuth credentials for this toolkit —
+    the user has to bring their own (API key, bearer token, username +
+    password). We still let Composio store + encrypt the credentials; we
+    just tell it which scheme to expect.
+    """
+    resp = client.auth_configs.create(
+        toolkit=toolkit,
+        options={"type": "use_custom_auth", "auth_scheme": scheme},
     )
     return getattr(resp, "id")
 
@@ -136,20 +157,95 @@ def list_connections() -> dict:
     return {"items": items, "total": len(items)}
 
 
-@router.post("/connect")
-def connect(req: ConnectRequest) -> dict:
-    """Returns a Composio-hosted OAuth URL. The user opens it, authorizes,
-    and on return their connection appears in /connections."""
+@router.get("/auth-schemes/{toolkit}")
+def auth_schemes(toolkit: str) -> dict:
+    """Discover how a toolkit authenticates so the dashboard can choose
+    between the one-click OAuth popup and the credential-input form.
+
+    Returns:
+      - managed_oauth: bool   — true when Composio supplies the OAuth app
+                                (Gmail, Slack, GitHub, etc.) → operator just
+                                clicks a link and authorizes
+      - schemes: [{mode, name, fields, auth_hint_url}] — for non-OAuth
+                                toolkits, the fields the operator needs to
+                                fill in (API key, bearer token, etc.)
+    """
     client = _require_client()
     try:
-        auth_config_id = _find_auth_config_id(client, req.toolkit)
-        if not auth_config_id:
-            auth_config_id = _create_managed_auth_config(client, req.toolkit)
-        connection_req = client.connected_accounts.link(
-            user_id=cc.STAFFROOM_USER_ID,
-            auth_config_id=auth_config_id,
-            callback_url=req.callback_url,
-        )
+        tk = client.toolkits.retrieve(toolkit)
+    except Exception as exc:
+        raise HTTPException(502, f"Composio API error: {type(exc).__name__}: {exc}")
+
+    managed = list(getattr(tk, "composio_managed_auth_schemes", None) or [])
+    schemes: list[dict] = []
+    for detail in (getattr(tk, "auth_config_details", None) or []):
+        mode = (getattr(detail, "mode", "") or "").upper()
+        fields_obj = getattr(detail, "fields", None)
+        init = getattr(fields_obj, "connected_account_initiation", None) if fields_obj else None
+        required = getattr(init, "required", None) or []
+        optional = getattr(init, "optional", None) or []
+        def _shape(f):
+            return {
+                "name": getattr(f, "name", ""),
+                "label": getattr(f, "display_name", "") or getattr(f, "name", ""),
+                "description": getattr(f, "description", "") or "",
+                "type": getattr(f, "type", "string"),
+                "is_secret": bool(getattr(f, "is_secret", False)),
+                "default": getattr(f, "default", None),
+            }
+        schemes.append({
+            "mode": mode,
+            "name": getattr(detail, "name", mode or "Custom"),
+            "auth_hint_url": getattr(detail, "auth_hint_url", None),
+            "fields": [_shape(f) for f in required] + [
+                {**_shape(f), "optional": True} for f in optional
+            ],
+        })
+    return {
+        "toolkit": toolkit,
+        "managed_oauth": bool(managed),
+        "managed_schemes": managed,
+        "schemes": schemes,
+    }
+
+
+@router.post("/connect")
+def connect(req: ConnectRequest) -> dict:
+    """Initiate a connection.
+
+    Two paths:
+      1. Managed OAuth — no credentials supplied; Composio handles the
+         OAuth dance, we return a redirect_url for the popup.
+      2. Custom auth — credentials supplied; we create a custom auth_config
+         with the right scheme and Composio stores them. No redirect_url;
+         the connection is active immediately.
+    """
+    client = _require_client()
+    try:
+        if req.credentials and req.auth_scheme:
+            # Custom-auth path (API_KEY / BEARER_TOKEN / BASIC / etc.)
+            auth_config_id = _create_custom_auth_config(
+                client, req.toolkit, req.auth_scheme,
+            )
+            connection_req = client.connected_accounts.link(
+                user_id=cc.STAFFROOM_USER_ID,
+                auth_config_id=auth_config_id,
+                callback_url=req.callback_url,
+                # Composio's link() accepts credentials in extra_body for
+                # non-OAuth schemes. The SDK passes anything in **kwargs
+                # through; this is how API-key tokens get attached.
+                **{"credentials": req.credentials},
+            )
+        else:
+            # Managed-OAuth path (existing behavior).
+            auth_config_id = _find_auth_config_id(client, req.toolkit)
+            if not auth_config_id:
+                auth_config_id = _create_managed_auth_config(client, req.toolkit)
+            connection_req = client.connected_accounts.link(
+                user_id=cc.STAFFROOM_USER_ID,
+                auth_config_id=auth_config_id,
+                callback_url=req.callback_url,
+            )
     except Exception as exc:
         raise HTTPException(502, f"Composio API error: {type(exc).__name__}: {exc}")
     return {

@@ -1,9 +1,9 @@
 "use client";
 
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { Check, Plug, Trash2, X } from "lucide-react";
+import { Check, ExternalLink, Plug, Trash2, X } from "lucide-react";
 import { useMemo, useState } from "react";
-import { ComposioToolkit, composio } from "@/lib/api";
+import { ComposioAuthField, ComposioToolkit, composio } from "@/lib/api";
 
 // Slugs we float to the top of the picker when the search box is empty.
 // Anything not in this list still appears in the grid below it.
@@ -30,17 +30,79 @@ export function ComposioPanel() {
   });
 
   const [picker, setPicker] = useState(false);
+  // When a toolkit needs API-key / bearer / basic creds we show this modal
+  // populated with fields the bridge discovered from Composio's catalog.
+  const [credForm, setCredForm] = useState<{
+    slug: string;
+    schemeName: string;
+    authScheme: string;
+    fields: ComposioAuthField[];
+    authHintUrl: string | null;
+  } | null>(null);
 
-  const connectMut = useMutation({
-    mutationFn: composio.connect,
-    onSuccess: (data) => {
-      if (data.redirect_url) {
-        window.open(data.redirect_url, "_blank", "noopener");
+  // Start a connection. Decides between the one-click OAuth popup and the
+  // credential-form modal by asking the bridge what the toolkit needs.
+  // Opens about:blank SYNCHRONOUSLY so the browser doesn't block the popup
+  // — that's the old bug; window.open after the fetch resolves was getting
+  // killed by Chrome/Safari's popup blocker.
+  async function startConnect(slug: string) {
+    const popup = window.open("about:blank", "_blank");
+    try {
+      const info = await composio.authSchemes(slug);
+      if (info.managed_oauth) {
+        const resp = await composio.connect(slug);
+        if (popup && resp.redirect_url) {
+          popup.location.href = resp.redirect_url;
+        } else {
+          popup?.close();
+        }
+        setTimeout(
+          () => qc.invalidateQueries({ queryKey: ["composio-connections"] }),
+          2000,
+        );
+        return;
       }
-      setTimeout(
-        () => qc.invalidateQueries({ queryKey: ["composio-connections"] }),
-        2000,
+      // Non-OAuth — close the placeholder tab and show the credential form.
+      popup?.close();
+      // Find the scheme with the fewest required fields. Composio sometimes
+      // returns multiple (e.g. both API_KEY and BASIC); operators want the
+      // simplest path.
+      const sortedSchemes = [...(info.schemes || [])].sort(
+        (a, b) =>
+          a.fields.filter((f) => !f.optional).length -
+          b.fields.filter((f) => !f.optional).length,
       );
+      const best = sortedSchemes[0];
+      if (!best) {
+        alert(
+          `Sorry — "${slug}" uses an authentication method we don't support yet (likely service accounts or enterprise SSO). Send your team a message.`,
+        );
+        return;
+      }
+      setCredForm({
+        slug,
+        schemeName: best.name,
+        authScheme: best.mode,
+        fields: best.fields,
+        authHintUrl: best.auth_hint_url,
+      });
+    } catch (err) {
+      popup?.close();
+      alert(`Couldn't start connection: ${(err as Error).message}`);
+    }
+  }
+
+  const submitCredMut = useMutation({
+    mutationFn: async (values: Record<string, string>) => {
+      if (!credForm) throw new Error("No credential form open");
+      return composio.connect(credForm.slug, {
+        auth_scheme: credForm.authScheme,
+        credentials: values,
+      });
+    },
+    onSuccess: () => {
+      setCredForm(null);
+      qc.invalidateQueries({ queryKey: ["composio-connections"] });
     },
   });
 
@@ -130,12 +192,137 @@ export function ComposioPanel() {
         <ToolkitPicker
           toolkits={toolkits.data?.items ?? []}
           loading={toolkits.isLoading}
-          connecting={connectMut.isPending ? connectMut.variables ?? null : null}
+          connecting={null}
           onClose={() => setPicker(false)}
-          onConnect={(slug) => connectMut.mutate(slug)}
+          onConnect={(slug) => {
+            // We don't close the picker — startConnect either opens the OAuth
+            // popup (operator sees both windows briefly) or opens our
+            // credential modal on top.
+            startConnect(slug);
+          }}
           connectedSlugs={new Set((connections.data?.items ?? []).map((c) => c.toolkit))}
         />
       )}
+
+      {credForm && (
+        <CredentialFormModal
+          slug={credForm.slug}
+          schemeName={credForm.schemeName}
+          fields={credForm.fields}
+          authHintUrl={credForm.authHintUrl}
+          submitting={submitCredMut.isPending}
+          error={(submitCredMut.error as Error)?.message ?? null}
+          onClose={() => setCredForm(null)}
+          onSubmit={(values) => submitCredMut.mutate(values)}
+        />
+      )}
+    </div>
+  );
+}
+
+// ──────────────────────────────────────────────────────────────────────
+// Credential form — used for API-key / bearer / basic-auth toolkits where
+// the operator has to bring their own credential. Form auto-adapts to
+// whatever fields Composio's catalog says are required for the toolkit.
+// ──────────────────────────────────────────────────────────────────────
+function CredentialFormModal({
+  slug,
+  schemeName,
+  fields,
+  authHintUrl,
+  submitting,
+  error,
+  onClose,
+  onSubmit,
+}: {
+  slug: string;
+  schemeName: string;
+  fields: ComposioAuthField[];
+  authHintUrl: string | null;
+  submitting: boolean;
+  error: string | null;
+  onClose: () => void;
+  onSubmit: (values: Record<string, string>) => void;
+}) {
+  const [values, setValues] = useState<Record<string, string>>(() =>
+    Object.fromEntries(fields.map((f) => [f.name, f.default ?? ""])),
+  );
+  const allRequiredFilled = fields
+    .filter((f) => !f.optional)
+    .every((f) => (values[f.name] ?? "").trim() !== "");
+
+  return (
+    <div
+      className="fixed inset-0 z-[60] bg-black/50 backdrop-blur-sm flex items-center justify-center p-4"
+      onClick={onClose}
+    >
+      <div
+        onClick={(e) => e.stopPropagation()}
+        className="bg-surface border border-line rounded-2xl shadow-2xl max-w-md w-full"
+      >
+        <div className="flex items-center justify-between p-5 border-b border-line">
+          <div>
+            <div className="font-display text-lg tracking-tight capitalize">
+              Connect {slug}
+            </div>
+            <div className="text-xs text-muted mt-1">{schemeName}</div>
+          </div>
+          <button onClick={onClose} className="p-1 hover:bg-surface-3 rounded">
+            <X className="w-4 h-4" />
+          </button>
+        </div>
+        <div className="p-5 space-y-3">
+          {authHintUrl && (
+            <a
+              href={authHintUrl}
+              target="_blank"
+              rel="noreferrer"
+              className="inline-flex items-center gap-1 text-xs text-accent hover:underline"
+            >
+              Get your credentials here <ExternalLink className="w-3 h-3" />
+            </a>
+          )}
+          {fields.map((f) => (
+            <label key={f.name} className="flex flex-col gap-1">
+              <span className="text-xs font-medium text-muted">
+                {f.label}
+                {f.optional && (
+                  <span className="text-[10px] ml-1 opacity-60">(optional)</span>
+                )}
+              </span>
+              <input
+                type={f.is_secret ? "password" : "text"}
+                value={values[f.name] ?? ""}
+                onChange={(e) =>
+                  setValues((p) => ({ ...p, [f.name]: e.target.value }))
+                }
+                className="px-3 py-2 rounded-lg border border-line bg-[var(--bg)] text-sm font-mono"
+                autoComplete="off"
+                spellCheck={false}
+              />
+              {f.description && (
+                <span className="text-[10px] text-muted">{f.description}</span>
+              )}
+            </label>
+          ))}
+          {error && <div className="text-xs text-red-600">{error}</div>}
+        </div>
+        <div className="flex items-center justify-end gap-2 p-4 border-t border-line">
+          <button
+            onClick={onClose}
+            className="px-4 py-2 border border-line rounded-lg text-sm"
+          >
+            Cancel
+          </button>
+          <button
+            onClick={() => onSubmit(values)}
+            disabled={submitting || !allRequiredFilled}
+            className="btn-primary disabled:opacity-50"
+          >
+            {submitting ? "Connecting…" : "Connect"}
+          </button>
+        </div>
+      </div>
     </div>
   );
 }

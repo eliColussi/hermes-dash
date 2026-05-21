@@ -467,16 +467,43 @@ export const capabilities = {
   list: () => req<{ items: Capability[] }>("/api/capabilities"),
 };
 
+export interface ComposioAuthField {
+  name: string;
+  label: string;
+  description: string;
+  type: string;
+  is_secret: boolean;
+  default: string | null;
+  optional?: boolean;
+}
+export interface ComposioAuthScheme {
+  mode: string;        // "OAUTH2" | "API_KEY" | "BEARER_TOKEN" | "BASIC" | ...
+  name: string;
+  auth_hint_url: string | null;
+  fields: ComposioAuthField[];
+}
+export interface ComposioAuthSchemes {
+  toolkit: string;
+  managed_oauth: boolean;
+  managed_schemes: string[];
+  schemes: ComposioAuthScheme[];
+}
+
 export const composio = {
   status: () => req<ComposioStatus>("/api/composio/status"),
   toolkits: () =>
     req<{ items: ComposioToolkit[]; total: number }>("/api/composio/toolkits"),
   connections: () =>
     req<{ items: ComposioConnection[]; total: number }>("/api/composio/connections"),
-  connect: (toolkit: string) =>
-    req<{ toolkit: string; redirect_url: string; connection_id: string }>(
+  authSchemes: (toolkit: string) =>
+    req<ComposioAuthSchemes>(`/api/composio/auth-schemes/${toolkit}`),
+  connect: (
+    toolkit: string,
+    body?: { auth_scheme?: string; credentials?: Record<string, string> },
+  ) =>
+    req<{ toolkit: string; redirect_url: string | null; connection_id: string }>(
       "/api/composio/connect",
-      { method: "POST", body: JSON.stringify({ toolkit }) },
+      { method: "POST", body: JSON.stringify({ toolkit, ...body }) },
     ),
   disconnect: (id: string) =>
     fetch(`/api/composio/connections/${id}`, { method: "DELETE" }),
