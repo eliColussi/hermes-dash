@@ -373,13 +373,25 @@ async def send_message(thread_id: str, payload: MessageSend) -> dict:
     _PENDING[thread_id] = {"started": started, "user_msg": payload.content}
     asyncio.create_task(_run_gateway_turn(thread_id, payload.content, headers, body))
 
-    existing = _thread_messages(thread.get("session_id"))
-    if not existing:
-        existing = [{
+    existing = list(_thread_messages(thread.get("session_id")))
+    # Always include the just-sent user message in the synchronous reply
+    # the frontend overwrites its cache with — _run_gateway_turn writes it
+    # to state.db asynchronously, so without this stub the cache drops back
+    # to [prior turns] only and the optimistic pending bubble vanishes
+    # until the next poll. The next poll replaces this stub (id=-1) with
+    # the real record from state.db, so there's no visible flicker.
+    last = existing[-1] if existing else None
+    already_there = (
+        last is not None
+        and last.get("role") == "user"
+        and (last.get("content") or "").strip() == payload.content.strip()
+    )
+    if not already_there:
+        existing.append({
             "id": -1, "role": "user", "content": payload.content,
             "tool_calls": None, "tool_name": None, "tool_call_id": None,
             "timestamp": started, "reasoning": None,
-        }]
+        })
     return {
         "thread": thread,
         "messages": existing,
