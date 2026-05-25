@@ -115,6 +115,17 @@ def create_schedule(payload: ScheduleCreate) -> dict:
         hermes.parse_schedule(payload.schedule)
     except Exception as exc:
         raise HTTPException(400, f"Invalid schedule: {exc}")
+    # If the operator picked an agent but didn't pick a model, inherit the
+    # agent's model — otherwise HERMÉS falls back to config.yaml's
+    # model.default, which means a MiniMax-configured agent's cron job
+    # silently runs on Sonnet. Explicit overrides still win.
+    effective_model = payload.model
+    if payload.agent_id and not effective_model:
+        from .. import hermes_client as hc
+        agents = hc.load_agents()
+        agent = next((a for a in agents if a.get("id") == payload.agent_id), None)
+        if agent and agent.get("model"):
+            effective_model = agent["model"]
     try:
         job = hermes.create_job(
             prompt=payload.prompt,
@@ -122,7 +133,7 @@ def create_schedule(payload: ScheduleCreate) -> dict:
             name=payload.name,
             repeat=payload.repeat,
             deliver=payload.deliver,
-            model=payload.model,
+            model=effective_model,
             skills=payload.skills,
         )
     except Exception as exc:

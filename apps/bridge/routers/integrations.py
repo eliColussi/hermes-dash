@@ -438,6 +438,16 @@ def set_channel_agent(payload: ChannelAgentPayload) -> dict:
     # Also stash the identity so the gateway logs are readable + a future
     # operator opening config.yaml can tell which Staff Room agent is wired.
     agent_cfg["name"] = chosen.get("name") or chosen.get("id")
+    # Critical: also push the agent's model to model.default. The HERMÉS
+    # gateway uses model.default for ALL gateway-routed traffic (Telegram,
+    # dashboard chat via api_server, cron jobs without their own override).
+    # Without this, picking MiniMax as the channel voice would still bill
+    # Sonnet because the gateway never sees per-agent model overrides — it
+    # only knows about the one global default we write here.
+    chosen_model = (chosen.get("model") or "").strip()
+    if chosen_model:
+        model_cfg = cfg.setdefault("model", {})
+        model_cfg["default"] = chosen_model
     tmp = HERMES_CONFIG_YAML.with_suffix(".tmp")
     with tmp.open("w", encoding="utf-8") as f:
         _y.safe_dump(cfg, f, sort_keys=False)
@@ -449,6 +459,7 @@ def set_channel_agent(payload: ChannelAgentPayload) -> dict:
     return {
         "agent_id": chosen.get("id"),
         "agent_name": chosen.get("name"),
+        "model": chosen_model or None,
         "note": "Restart the messaging service for the change to take effect.",
     }
 
