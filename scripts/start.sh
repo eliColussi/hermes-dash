@@ -55,6 +55,15 @@ for plugin_src in /app/plugins/*/; do
   PLUGIN_NAMES="$PLUGIN_NAMES $plugin_name"
 done
 
+# Client pack (lead-magnet builds): copy client SOP/playbook skills into
+# HERMÉS's skills dir so agents can read them and the Skills page lists them.
+# Always overwrites — the repo is the source of truth for these files.
+if [ -d /app/client/skills ]; then
+  mkdir -p "${HERMES_HOME:-/data/hermes}/skills"
+  cp -R /app/client/skills/. "${HERMES_HOME:-/data/hermes}/skills/"
+  echo "[start] client skills seeded from /app/client/skills"
+fi
+
 # Idempotent first-boot config: auto-write the minimal hermes config.yaml
 # from whichever provider API key is set in Railway env vars, and enable our
 # shipped plugins. Lets a fresh client deploy start working the moment the

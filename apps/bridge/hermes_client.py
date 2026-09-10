@@ -24,6 +24,8 @@ import yaml
 from ruamel.yaml import YAML
 
 from .config import (
+    CLIENT_AGENTS_SEED,
+    CLIENT_SKILLS_DIR,
     HERMES_BIN,
     HERMES_HOME,
     HERMES_LOGS_DIR,
@@ -215,6 +217,20 @@ def seed_default_agents() -> None:
             "enabled": True,
         },
     ]
+    if CLIENT_AGENTS_SEED.exists():
+        # A lead-magnet client pack ships its own agents. Use those, and keep
+        # the Boss (chief of staff) from the defaults so delegation still works.
+        try:
+            with CLIENT_AGENTS_SEED.open() as f:
+                client_agents = list((_yaml.load(f) or {}).get("agents", []))
+        except Exception as exc:  # noqa: BLE001
+            print(f"[bridge] client/agents.seed.yaml unreadable ({exc}); using defaults")
+            client_agents = []
+        if client_agents:
+            ids = {a.get("id") for a in client_agents}
+            client_agents += [a for a in defaults if a["id"] == "boss" and "boss" not in ids]
+            save_agents(client_agents)
+            return
     save_agents(defaults)
 
 
@@ -372,7 +388,7 @@ def agent_runtime_status(agent_id: str) -> tuple[str, Optional[int], Optional[fl
 # ---------------------------------------------------------------------------
 def list_skills() -> list[dict[str, Any]]:
     out: list[dict[str, Any]] = []
-    for root in (HERMES_SKILLS_DIR, VENDOR_SKILLS_DIR):
+    for root in (HERMES_SKILLS_DIR, CLIENT_SKILLS_DIR, VENDOR_SKILLS_DIR):
         if not root.exists():
             continue
         for skill_md in root.rglob("SKILL.md"):

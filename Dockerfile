@@ -39,6 +39,7 @@ COPY --from=web-build /web/public /app/apps/web/public
 # Staff Room OS plugins (Composio, future audit hooks, etc.) — symlinked into
 # $HERMES_HOME/plugins at boot by start.sh.
 COPY plugins /app/plugins
+COPY client /app/client
 
 COPY scripts/start.sh /app/start.sh
 RUN chmod +x /app/start.sh
