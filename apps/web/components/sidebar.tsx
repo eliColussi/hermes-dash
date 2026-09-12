@@ -2,35 +2,16 @@
 
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import {
-  Home,
-  Bot,
-  Activity,
-  ShieldCheck,
-  Workflow,
-  Plug,
-  Zap,
-  Target,
-  MessageSquare,
-  BarChart3,
-  Settings,
-  Search,
-} from "lucide-react";
+import { Home, Bot, Plug, Settings } from "lucide-react";
 import { cn } from "@/lib/cn";
 
-// One flat list — no jargon section labels.
-// URL routes stay stable; only labels change.
+// Three items. Every other page still exists by URL (schedules, triggers,
+// activity, approvals, goals, usage, chat, welcome) but is off the menu on
+// purpose: a business owner runs the whole thing from Home. See docs/SIMPLIFY.md.
 const NAV = [
-  { href: "/welcome", label: "Home", icon: Home },
+  { href: "/home", label: "Home", icon: Home },
+  { href: "/integrations", label: "Apps", icon: Plug },
   { href: "/agents", label: "Agents", icon: Bot },
-  { href: "/chat", label: "Chat", icon: MessageSquare },
-  { href: "/schedules", label: "Schedules", icon: Workflow },
-  { href: "/webhooks", label: "Triggers", icon: Zap },
-  { href: "/activity", label: "Activity", icon: Activity },
-  { href: "/approvals", label: "Approvals", icon: ShieldCheck },
-  { href: "/goals", label: "Goals", icon: Target },
-  { href: "/integrations", label: "Connections", icon: Plug },
-  { href: "/analytics", label: "Usage", icon: BarChart3 },
 ];
 
 export function Sidebar({
@@ -59,17 +40,6 @@ export function Sidebar({
         </div>
         <div className="text-[10px] uppercase tracking-[0.18em] text-muted mt-1">
           Operating System
-        </div>
-      </div>
-
-      <div className="px-3 pb-3">
-        <div className="relative">
-          <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-muted" />
-          <input
-            placeholder="Search"
-            className="w-full pl-9 pr-9 py-2 text-sm rounded-xl border border-line bg-surface-2 focus:outline-none focus:border-accent focus:shadow-[0_0_0_3px_var(--accent-soft)] transition"
-          />
-          <span className="absolute right-3 top-1/2 -translate-y-1/2 text-[10px] text-muted font-mono">/</span>
         </div>
       </div>
 

@@ -31,6 +31,9 @@ Volume: /data/hermes + /data/staffroom (Railway Volume on prod)
 ## What's wired
 
 ### Pages (sidebar)
+
+**Since 2026-09-12 the sidebar shows three items: Home, Apps, Agents.** Home is the one screen a business owner needs (numbers from connected apps, a command box, recent activity). Every page below still exists at its URL. Why and what was cut: [docs/SIMPLIFY.md](docs/SIMPLIFY.md).
+
 | | Page | What |
 |---|---|---|
 | | Welcome | Onboarding checklist that auto-detects what's set up — clear "Next: …" CTA until you're live |

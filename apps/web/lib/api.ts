@@ -518,3 +518,27 @@ export interface Integration {
   values: Record<string, string>;
   configured: boolean;
 }
+
+// ---- Home (the one screen) ------------------------------------------------
+export interface HomeTile {
+  toolkit: string;
+  name: string;
+  icon: string;
+  connected: boolean;
+  label: string;
+  value: string | null;
+  hint: string;
+  status: "ok" | "error" | "connect";
+}
+export interface HomeData {
+  client: { business_name: string; one_liner: string };
+  setup: { llm_ready: boolean; llm_provider: string | null; composio_configured: boolean; composio_error: string | null };
+  connected: string[];
+  metrics: HomeTile[];
+  suggestions: HomeTile[];
+  agents: Agent[];
+  recent: RecentRun[];
+}
+export const home = {
+  get: (refresh = false) => req<HomeData>(`/api/home${refresh ? "?refresh=true" : ""}`),
+};
