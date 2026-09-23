@@ -16,7 +16,10 @@ export default function LoginPage() {
 function LoginForm() {
   const router = useRouter();
   const params = useSearchParams();
-  const next = params.get("next") || "/welcome";
+  // Land on Home, not the old setup checklist. /welcome went off the menu in
+  // 74c375d but stayed the post-login default, so every owner logged in to the
+  // page we had deliberately hidden.
+  const next = params.get("next") || "/home";
   const [username, setUsername] = useState("");
   const [password, setPassword] = useState("");
   const [err, setErr] = useState<string | null>(null);
